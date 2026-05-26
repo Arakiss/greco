@@ -45,12 +45,12 @@ Primary sources:
 
 | System | Language / core | Extensibility | Validation | Persistence | Greco lesson |
 | --- | --- | --- | --- | --- | --- |
-| Pi | Minimal coding agent, intentionally small surface | Skills/extensions built by the agent | Mostly operator/task outcome driven | Local skill accumulation | Inherit the small primitive surface and local skill ownership; add empirical admission gates. |
-| Codex CLI | Rust-first CLI with sandboxing, approvals, UI/core separation | Tool and protocol surfaces around a core agent runtime | Strong local verification through commands and sandbox outcomes | Session/config surfaces, not an evolving skill archive | Inherit Rust, terminal-first shape, core/UI separation, and explicit safety boundaries. Reject heavyweight host integration in v0. |
-| DGM | Research system around self-improving coding agents | Evolves agent code variants | Benchmark fitness, archive comparison, sandboxed execution | Open-ended archive of variants | Inherit archive and empirical selection. Reject evolving the whole harness in v0. |
-| Aider | Mature coding assistant with repository editing loop | Model/tool/config integration | Tests and user command loops | Repo context and chat history | Use as evidence that test-command feedback is the practical coding-agent fitness signal. |
-| OpenHands | Full software-agent platform | Runtime, sandbox, browser, integrations | Task and benchmark oriented | Workspace/runtime state | Reject platform scope for v0; study sandbox ergonomics later. |
-| SWE-agent | Benchmark-oriented SWE task agent | Agent config and command hooks | SWE-bench style task evaluation | Trajectory/log artifacts | Borrow task trace discipline and benchmark harness ideas. |
+| Pi | Minimal coding agent, intentionally small surface | Skills/extensions built by the agent | `check`, smoke, package verification, and task outcome | JSONL sessions, tree entries, branch summaries, compaction | Inherit the small primitive surface and local skill ownership; add empirical admission gates. |
+| Codex CLI | Rust-first CLI with sandboxing, approvals, UI/core separation | Tool/protocol/config surfaces around a core agent runtime | Sandbox/approval policy, local commands, review/rollback surfaces | Config, history, resumable runtime state | Inherit Rust, terminal-first shape, core/UI separation, and explicit safety boundaries. Reject heavyweight host integration in v0. |
+| DGM | Research system around self-improving coding agents | Evolves agent code variants | Benchmark fitness, archive comparison, sandboxed execution | `dgm_metadata.jsonl`, child metadata, patches, logs | Inherit archive lineage and empirical selection. Reject evolving the whole harness in v0. |
+| Aider | Mature coding assistant with repository editing loop | Model/tool/config integration | Lint/test command loops, git undo | Git commits, history files, repo map | Use as evidence that test-command feedback is the practical coding-agent fitness signal. |
+| OpenHands | Full software-agent platform | Typed tools, SDK, plugins, sandbox | Docker sandbox, security analyzers, confirmation policies | Event-sourced conversation state | Reject platform scope for v0; borrow typed action/observation and event persistence. |
+| SWE-agent | Benchmark-oriented SWE task agent | YAML-governed tools/environments/hooks | SWE-bench trajectories and retry/reviewer loops | `.traj` files with thought/action/observation/state | Borrow trajectory schema discipline and benchmark harness ideas. |
 
 Design conclusion:
 

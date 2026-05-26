@@ -54,6 +54,16 @@ Greco exposes four primitive tools:
 
 All tool calls produce trace items. Tool outputs are fed back into the model through Responses function-call outputs.
 
+All actions should write trajectory records with at least:
+
+- timestamp;
+- request/session id;
+- action type;
+- normalized input;
+- observation/result;
+- success flag;
+- validation or command evidence when available.
+
 ## Skill Catalog
 
 Skill manifests are JSON:

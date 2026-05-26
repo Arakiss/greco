@@ -1,0 +1,11 @@
+{
+  "id": "example_fail",
+  "version": "0.1.0",
+  "kind": "script",
+  "entrypoint": "run.sh",
+  "description": "Minimal skill fixture that fails validation.",
+  "validation": {
+    "command": "sh run.sh",
+    "timeout_seconds": 5
+  }
+}
