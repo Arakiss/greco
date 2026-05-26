@@ -1,0 +1,21 @@
+/target
+**/*.rs.bk
+Cargo.lock.bak
+
+# Local credentials and runtime state.
+.env
+.env.*
+!.env.example
+/.greco
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.log
+*.log.*
+
+# Editor / OS.
+.DS_Store
+.idea/
+.vscode/
+*.swp
