@@ -21,5 +21,5 @@ Verification:
 
 ```sh
 git status --ignored --short
-git grep -n "sk-" -- . ':!docs/research/rfc-v0-kappa.md'
+git grep -n -E "sk-(proj|svcacct)-" -- . ':!docs/**'
 ```
