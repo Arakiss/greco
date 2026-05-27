@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.90"
 license = "MIT"
 repository = "https://github.com/Arakiss/greco"
-description = "A Rust coding-agent harness that evolves its local skill catalog."
+description = "A Rust coding-agent harness that observes its own use and improves itself within operator-defined budgets and an evaluation suite."
 
 [[bin]]
 name = "greco"

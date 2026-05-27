@@ -1,6 +1,10 @@
 # Roadmap
 
-## 0.1.0-alpha.1
+The original alpha cycle explored the skill catalog axis. After the loop closed, the axis was reviewed and replaced. See [`../architecture/recalibration.md`](../architecture/recalibration.md). The roadmap below preserves the alpha cycle as historical context and starts the recalibrated work at `0.4.0-alpha.1`.
+
+## Alpha skill cycle (closed)
+
+### 0.1.0-alpha.1
 
 - Secret-safe repo shell.
 - Research and design docs.
@@ -10,7 +14,7 @@
 - Skill manifest parsing and validation fixtures.
 - Plain-text TUI snapshot.
 
-## 0.2.0-alpha.1
+### 0.2.0-alpha.1
 
 - Full Responses tool loop.
 - Function-call output submission.
@@ -18,7 +22,7 @@
 - Stateless reasoning preservation via `reasoning.encrypted_content` include.
 - Live smoke against OpenAI `gpt-5.4` using only ignored `.greco` artifacts.
 
-## 0.3.0-alpha.1
+### 0.3.0-alpha.1
 
 - Candidate skill archive layout.
 - Promotion/rejection file moves.
@@ -28,20 +32,68 @@
 - CLI lifecycle commands for create, validate, promote, reject, and list.
 - Live OpenAI proposal smoke using Responses `text.format`.
 
-## 0.4.0-alpha.1
+Outcome: loop closes. Critical review concludes the skill axis does not test the deeper aspiration. Recalibration follows.
 
-- Active skill invocation from `greco ask`.
-- Score-aware skill selection.
-- Multi-task validation fixtures.
+## Recalibrated cycle (active)
+
+### 0.4.0-alpha.1 — Instrumentation and baseline (Phase 1)
+
+- `eval` module: suite loader, criterion runner, budget skeleton.
+- Five baseline suite tasks on a real local project.
+- Friction instrumentation in the trajectory.
+- `audit` module with markdown + JSON report.
+- Operator commands: `greco eval list`, `greco eval run`, `greco audit --since`.
+
+Decision gate: baseline friction signals stable enough for 5% delta detection.
+
+### 0.5.0-alpha.1 — Proposal pass with manual application (Phase 2)
+
+- Rewritten `proposal`, `catalog`, `validation` modules.
+- Subagent loader.
+- Operator commands for the full modification lifecycle, manual application only.
+- Layer A (cached procedures) and Layer S1 (subagent prompt edits) only.
+
+Decision gate: proposal precision and at least one applied modification moves the suite.
+
+### 0.6.0-alpha.1 — Autonomous loop on A and S1 (Phase 3, v0 acceptance gate)
+
+- Budget enforcement.
+- Threshold logic.
+- Scheduler-driven proposal-validation-application loop.
+- Freeze caps and rollback.
+- Extended audit reports.
+
+Decision gate: one audit window of autonomous operation shows measurable aggregate friction reduction. This is the v0 acceptance gate. If it fails, the project closes per RFC Appendix B.
+
+### 0.7.0-alpha.1 — Higher layers under audit (Phase 4)
+
+- Layers B, C, S2, S3 autonomous within stricter thresholds.
+- Layer D (system prompt) with mandatory pre-application diff in audit.
+- Layer E (settings, hooks, permissions) explicit operator approval per modification.
+
+### 0.8.0-alpha.1 — Second-project validation and bundle (Phase 5)
+
+- Replication on a second operator project with its own suite.
 - Catalog lint.
 - `greco report bundle --redact`.
 
 ## Beta Gate
 
-Greco should not be called beta until:
+`0.9.0-beta.1` is conditional on:
 
-- a simple coding task can complete through read/edit/bash;
-- at least one generated skill can be proposed, validated, promoted, and reused;
-- rejected candidates leave useful traces;
-- secret scans and CI are green;
-- the README matches actual behavior.
+- Phase 3 acceptance gate passed.
+- A second project shows non-zero friction reduction.
+- README reflects measured behavior.
+- Secret scans and CI green.
+
+## Versioning rules
+
+Pre-1.0 semantic versioning:
+
+- Breaking CLI, trace schema, manifest schema, suite schema, or provider trait changes require a minor bump.
+- Compatible fixes use patch bumps.
+- Each minor in the alpha series corresponds to a numbered Phase in the implementation plan.
+
+## Honest closure clause
+
+At every decision gate (Phase 1 end, Phase 2 end, Phase 3 end), the project closes if the gate fails. Closure is recorded as a final `What I learned` document in `docs/` and the repository is archived with the gate report. This clause is inherited from the Kappa RFC Appendix B and reaffirmed by the recalibration.

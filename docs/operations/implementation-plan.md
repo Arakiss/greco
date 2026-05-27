@@ -1,119 +1,138 @@
 # Implementation Plan
 
-## Phase 0: Repository Foundation
+This plan covers the recalibrated v0 axis (harness self-improvement). It supersedes the original Phase 0-5 plan that targeted the skill catalog. Phases 0-5 of the alpha cycle are recorded here as completed historical context; the active plan begins at Phase 1.
 
-Exit criteria:
+## Phase 0 (completed) — Repository foundation
 
-- Git repository exists under `indie-hackers/greco`.
-- `.env.local` is ignored.
-- Local OpenAI key is stored outside git.
-- Research, critical analysis, design, and risk docs exist.
-- First Lore commits are present.
+Delivered in `0.1.0-alpha.1`. Secret-safe shell, ignored `.env.local`, research and design docs, atomic Lore commits.
 
-## Phase 1: Rust CLI Skeleton
+## Phase 0.5 (completed) — Alpha skill loop
 
-Build:
+Delivered through `0.3.0-alpha.1`. Closed the original Kappa loop: structured skill proposal, candidate persistence, empirical (self-referential) validation, promotion/rejection, scores, JSONL traces, CLI lifecycle commands. This phase confirmed the loop closes but exposed the thesis weakness recorded in [`../architecture/recalibration.md`](../architecture/recalibration.md).
 
-- `Cargo.toml`
-- `rust-toolchain.toml`
-- `src/main.rs`
-- `src/config.rs`
-- `src/provider/mod.rs`
-- `src/provider/openai.rs`
-- `src/tools.rs`
-- `src/catalog.rs`
-- `src/validation.rs`
-- `src/tui.rs`
+## Phase 1 — Instrumentation and baseline
 
-Commands:
-
-- `greco --version`
-- `greco status --json`
-- `greco ask --input <text> [--max-turns <n>] [--stream]`
-- `greco propose-skill --task <text> --json`
-- `greco catalog list --state all --json`
-- `greco catalog create-candidate --id <id> --description <text> --script <text> --validation-command <command>`
-- `greco catalog validate <candidate-id> --json`
-- `greco catalog promote <candidate-id> --json`
-- `greco catalog reject <candidate-id> --reason <text> --json`
-- `greco validate-skill <path> --json`
-- `greco tui --snapshot`
-
-Exit criteria:
-
-- `cargo fmt --check`
-- `cargo clippy --workspace --all-targets -- -D warnings`
-- `cargo test --workspace`
-
-## Phase 2: OpenAI Responses Adapter
+Goal: produce reliable, low-noise friction signals from real sessions before any modification mechanism exists. If signals are too noisy to support measurement, the project closes here.
 
 Build:
 
-- Direct `reqwest` client.
-- JSON request/response structs.
-- SSE parser for text deltas and completed events.
-- Minimal function-tool schema generation for primitive tools.
-- `store: false` default.
-- `gpt-5.4` default from env/config.
-- Raw output item retention for stateless tool loops.
-- `reasoning.encrypted_content` include for reasoning item replay when `store: false`.
+- `eval` module: suite loader, criterion runner, budget enforcer.
+- Five baseline suite tasks under `.greco/eval/` covering refactor, bug fix, doc update, test addition, and search/answer. Defined by the operator on a real local project.
+- `agent.rs` instrumentation: emit deterministic friction events (`turns`, `tokens`, `repeated_errors`, `retracements`, `avoidable_prompts`, `missing_tool_failures`, `objective_success`) into the existing trajectory JSONL.
+- `audit` module: aggregate report renderer (markdown + JSON), `greco audit --since <window>` command.
+- Operator command surface: `greco eval list`, `greco eval run <task-id>`, `greco audit --since <window>`.
 
 Exit criteria:
 
-- Unit tests cover request construction, response text extraction, function-call extraction, and SSE event parsing.
-- One opt-in live smoke command can run against `.env.local` without printing the key.
+- Baseline friction metrics computed for each suite task across at least 10 sessions.
+- Variance of `turns_per_task` and `tokens_per_task` is small enough for delta detection at 5% to be meaningful (declared threshold; operator validates the variance band manually).
+- Audit report renders correctly with at least one window of real data.
+- `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` all pass.
 
-## Phase 3: Primitive Tool Execution
+Decision gate at the end of Phase 1: if signals are unusably noisy on a real project, the project closes per the RFC Appendix B clause. The recalibration document acknowledges this.
+
+## Phase 2 — Proposal pass with manual application
+
+Goal: validate that the proposal pass produces useful candidate modifications. The operator applies accepted proposals by hand to keep autonomous behavior off until candidate quality is verified.
 
 Build:
 
-- Responses function-call loop.
-- Function-call output submission.
-- Session trajectory JSONL under `.greco/traces/sessions`.
-- Workspace path guard.
-- UTF-8 read/write.
-- Simple edit by exact find/replace.
-- Bash command runner with cwd, timeout, stdout/stderr capture.
+- `proposal` module rewritten: friction-detection pass over recent traces, structured-output proposal of Layer A and S1 modifications (cached procedures, subagent prompt edits) only.
+- `catalog` module rewritten: registry of harness modifications with states `proposed`, `validated`, `active`, `rejected`, `retired` and lineage fields described in `design.md`.
+- `validation` module rewritten: run the suite with and without a candidate, compute deltas, write a validation trace.
+- New commands: `greco propose [--since <window>]`, `greco modification list --state <state>`, `greco modification show <id>`, `greco modification validate <id>`, `greco modification apply <id>`, `greco modification revert <id>`.
+- Subagent loader: minimum support for declared subagents in `.greco/subagents/`. The runtime invocation surface from the main agent can wait for Phase 3.
 
 Exit criteria:
 
-- Tests prove path traversal is rejected.
-- Tests prove model output items are preserved and tool outputs are returned.
-- Tests prove bash timeout handling.
-- Tests prove edit failure is explicit when the target text is absent.
-- One live OpenAI smoke task completes through write, read, and bash.
+- At least 20 candidate modifications produced over the baseline window.
+- Operator-rated precision of proposals (manually labelled as "useful" vs "noise" post-hoc) at or above 50%. The exact threshold is recorded in the audit; if proposals are pure noise, the project closes.
+- A handful of useful proposals applied manually show measurable friction reduction on the suite. The exact number is operator judgment, not a fixed target.
+- `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` all pass.
 
-## Phase 4: Skill Catalog and Validation
+Decision gate at the end of Phase 2: if proposal precision is too low or no applied modification moves the suite, the project closes.
+
+## Phase 3 — Autonomous application, Layers A and S1
+
+Goal: close the loop. Modifications on Layers A and S1 are applied autonomously within budgets and thresholds. Operator only audits in aggregate.
 
 Build:
 
-- Manifest schema.
-- Candidate/active/rejected archive layout.
-- Validation trace JSONL.
-- Promotion gate.
-- Basic score file.
-- Structured OpenAI proposal path using Responses `text.format`.
-- Deterministic local candidate creation path for no-network dogfood.
+- Budget enforcement in `eval` and `validation`: `max_tokens_per_window`, `max_modifications_per_window`, `max_chained_modifications`, `max_tokens_per_validation`, `max_wall_seconds_per_validation`, `early_stop_on_first_regression`.
+- Threshold logic in `validation`: `min_relative_improvement`, `regression_tolerance`, `validation_runs_required`, `pareto_keep_when_uncomparable`.
+- Scheduler: the proposal pass runs on cadence (post-session or scheduled), validates within budget, applies or archives, never asks the operator at proposal time.
+- Freeze caps: when modifications applied exceed `max_modifications_per_window`, the system freezes further auto-application until the next audit.
+- Rollback: `greco modification revert <id>` and `greco harness checkpoint restore <id>`. Every applied modification creates an implicit checkpoint.
+- Audit report extended: applied modifications with deltas, rolled-back modifications, suite coverage notes, budget consumption against caps.
 
 Exit criteria:
 
-- A fixture skill passes validation and promotes.
-- A failing skill is rejected and archived with trace.
-- Re-running validation is deterministic enough for local tests.
-- A live OpenAI proposal writes a candidate, source trace, validation trace, and promoted active skill.
+- One audit window completed under autonomous operation on Layers A and S1 with no operator approval during the window.
+- Aggregate friction on the suite shows measurable improvement vs. the Phase 1 baseline. The exact delta is operator judgment based on the audit.
+- Zero security incidents: no modification escaped the path guard, no settings/permissions modified at this phase, no suite file modified by the system.
+- Rollback verified end to end.
 
-## Phase 5: README and Private Remote
+Decision gate at the end of Phase 3: this is the v0 acceptance gate. If aggregate friction on the suite has not improved meaningfully and predictably, the recalibrated thesis has not been validated and the project closes.
+
+## Phase 4 — Higher-risk layers under stricter audit
+
+Goal: unlock Layers B, C, D, S2, S3. Layer E remains operator-gated explicitly.
 
 Build:
 
-- Gommage-quality README front door.
-- Roadmap, threat model, and publishing notes.
-- GitHub metadata: private repo, description, topics.
-- Atomic Lore commits.
+- Layer B autonomous application with the same threshold structure as A.
+- Layer C with stricter thresholds and a mandatory two-validation rule.
+- Layer D (system prompt edits) requires the proposed diff to appear verbatim in the audit report and to be applied only after the next audit cadence passes without operator veto.
+- Layer S2 (subagent toolset) and S3 (new subagents) autonomous within stricter thresholds; the operator audits the subagent declarations as part of the audit report.
+- Layer E (settings, hooks, permissions) stays frozen for explicit operator approval per-modification.
 
 Exit criteria:
 
-- Secret scan is clean.
-- Remote is private.
-- `main` is pushed.
-- Optional `v0.3.0-alpha.1` tag is created only after the repo is verified.
+- One audit window where modifications across A, B, C, S1, S2, S3 coexist and the aggregate suite trend remains positive.
+- Diff-visible Layer D edits flagged in audit reports.
+- Documented procedure for the operator to handle Layer E proposals.
+
+## Phase 5 — Hardening and second-project validation
+
+Goal: ensure Greco operates on a project other than the one it was tuned on.
+
+Build:
+
+- Suite-independence checks: aggregate metrics on a second operator project, with its own suite, replicated independently.
+- Audit cadence templates.
+- Catalog lint: detect near-duplicate active modifications, contradictory edits, dead procedures.
+- `greco report bundle --redact`: a portable bundle of suite, catalog, traces, and audit reports with secrets stripped.
+
+Exit criteria:
+
+- Second project shows non-zero friction reduction.
+- Catalog lint clean.
+- Bundle reproducible.
+
+## Beta Gate
+
+Greco does not call itself beta until:
+
+- Phase 3 acceptance gate is passed.
+- A second project validates that the mechanism is not a single-project artifact.
+- The README reflects measured behavior, not aspirational claims.
+- Secret scans and CI are green.
+
+## Verification, every phase
+
+```sh
+cargo fmt --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+```
+
+Secret scan:
+
+```sh
+git status --ignored --short
+git grep -n -E "sk-(proj|svcacct)-" -- . ':!docs/**'
+```
+
+## Implementation owner
+
+Codex is the implementation owner from Phase 1 onward. This documentation set is the contract Codex implements against. Open questions on contract details should be answered by amending the design or recalibration documents, not by adding implementation-only conventions.

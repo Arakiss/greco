@@ -2,7 +2,9 @@
 
 Date: 2026-05-27
 
-This document records the research pass that gates Greco's v0 design. The source RFC used "Kappa" as the working name; this repository uses **Greco** as the product name and keeps Kappa as historical project context only.
+This document records the research pass that gated Greco's original v0 design (skill catalog axis). After v0.3-alpha closed the alpha loop, the axis was recalibrated. The research body below is preserved because the sources and lessons remain valid; the conclusions in each section have been updated to reflect the current axis. See [`../architecture/recalibration.md`](../architecture/recalibration.md) for the pivot reasoning.
+
+The source RFC used "Kappa" as the working name; this repository uses **Greco** as the product name and keeps Kappa as historical project context only.
 
 ## OpenAI API State
 
@@ -52,9 +54,13 @@ Primary sources:
 | OpenHands | Full software-agent platform | Typed tools, SDK, plugins, sandbox | Docker sandbox, security analyzers, confirmation policies | Event-sourced conversation state | Reject platform scope for v0; borrow typed action/observation and event persistence. |
 | SWE-agent | Benchmark-oriented SWE task agent | YAML-governed tools/environments/hooks | SWE-bench trajectories and retry/reviewer loops | `.traj` files with thought/action/observation/state | Borrow trajectory schema discipline and benchmark harness ideas. |
 
-Design conclusion:
+Design conclusion (alpha cycle, superseded):
 
-Greco occupies a narrow intersection: Pi's local minimalism plus DGM's archive and fitness discipline, restricted to the skill catalog. It should not become a platform, IDE, or multi-agent runtime in v0.
+The alpha cycle hypothesized that Greco occupies a narrow intersection: Pi's local minimalism plus DGM's archive and fitness discipline, restricted to the skill catalog. v0.1-v0.3-alpha implemented that hypothesis and closed the loop.
+
+Design conclusion (current axis):
+
+After the alpha loop closed, a critical review concluded the skill axis did not test the deeper aspiration and that admission was self-referential. The current axis recasts the intersection as: Pi's local minimalism + DGM's archive discipline + ACE's surrounding-context evolution + GEPA's Pareto retention, applied to *typed, layered, reversible modifications of the harness itself* (system prompt, tools, subagents, settings, hooks, cached procedures). See [`../architecture/recalibration.md`](../architecture/recalibration.md). Greco should still not become a platform, IDE, or multi-agent runtime in v0.
 
 ## Self-Improvement Frameworks
 
@@ -83,17 +89,17 @@ Primary sources:
 | APIGen / APIGen-MT / TOUCAN | Synthetic tool-use trajectories and API-use data | Execution, semantic checks, reviewer committees, and benchmark filters | Generated datasets | Useful later to build synthetic skill validation sets. The transferable idea is blueprint-first validation, not model training. |
 | MemSkill / Mem2Evolve | Memory operations, experience memory, and asset/tool memory | Downstream task improvement and hard-case review loops | Evolving memory plus tool/asset stores | Closest recent support for Greco's thesis: skills should be generated from accumulated experience, and promoted skills should create new experience traces. |
 
-Design conclusion:
+Design conclusion (current axis):
 
 The strongest transferable pattern is not a specific dependency. It is the loop:
 
-1. Generate or mutate a candidate.
-2. Run it against explicit tasks.
+1. Generate or mutate a candidate (now: a harness modification, typed by layer).
+2. Run it against explicit tasks (now: the operator-defined evaluation suite, read-only for the system).
 3. Keep the trace.
-4. Promote only on empirical evidence.
-5. Preserve failures as archive material.
+4. Apply only on empirical evidence within budgets and thresholds.
+5. Preserve failures as archive material with lineage.
 
-Greco should implement that loop with local files and process execution before adopting optimizer frameworks. GEPA-style Pareto retention is a design hint: when two variants pass different task clusters, Greco should not force a single global winner too early.
+Greco should implement that loop with local files and process execution before adopting optimizer frameworks. GEPA-style Pareto retention is load-bearing in the current axis: when two modifications trade off across metrics, both are kept on the frontier. ACE-style structured context evolution is the closest analog in spirit; MemSkill/Mem2Evolve are the closest analogs in the loop of accumulated experience producing curated assets.
 
 ## Rust LLM Ecosystem
 
