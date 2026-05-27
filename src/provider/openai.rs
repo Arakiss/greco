@@ -34,6 +34,9 @@ impl OpenAiProvider {
         if !request.include.is_empty() {
             body["include"] = json!(request.include);
         }
+        if let Some(format) = request.text_format {
+            body["text"] = json!({ "format": format });
+        }
         body
     }
 

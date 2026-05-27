@@ -2,6 +2,7 @@ mod agent;
 mod catalog;
 mod cli;
 mod config;
+mod proposal;
 mod provider;
 mod tools;
 mod trajectory;
@@ -10,7 +11,8 @@ mod validation;
 
 use std::process::ExitCode;
 
-use cli::{Command, ToolCommand, parse_args};
+use catalog::{CandidateDraft, SkillLineage, SkillState};
+use cli::{CatalogCommand, CatalogListState, Command, ToolCommand, parse_args};
 use config::Config;
 use provider::OpenAiProvider;
 use serde_json::json;
@@ -114,22 +116,8 @@ async fn run() -> Result<ExitCode, String> {
                 ExitCode::from(2)
             })
         }
-        Command::CatalogList { json: as_json } => {
-            let catalog = catalog::Catalog::load(&config.home)?;
-            if as_json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&catalog.active).map_err(|err| err.to_string())?
-                );
-            } else if catalog.active.is_empty() {
-                println!("No active skills yet.");
-            } else {
-                for skill in catalog.active {
-                    println!("{} {} - {}", skill.id, skill.version, skill.description);
-                }
-            }
-            Ok(ExitCode::SUCCESS)
-        }
+        Command::ProposeSkill(command) => handle_propose_skill(command, &config).await,
+        Command::Catalog(command) => handle_catalog(command, &config).await,
         Command::ValidateSkill {
             path,
             json: as_json,
@@ -154,4 +142,188 @@ async fn run() -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
     }
+}
+
+async fn handle_propose_skill(
+    command: cli::ProposeSkillCommand,
+    config: &Config,
+) -> Result<ExitCode, String> {
+    let api_key = config
+        .api_key
+        .clone()
+        .ok_or_else(|| "OPENAI_API_KEY is missing; copy .env.example to .env.local".to_string())?;
+    let provider = OpenAiProvider::new(api_key, config.model.clone());
+    let created =
+        proposal::propose_skill(&provider, config, command.task, command.overwrite).await?;
+    print_json_or_text(
+        command.json,
+        &created,
+        format!(
+            "candidate {} created at {}",
+            created.key,
+            created.path.display()
+        ),
+    )?;
+    Ok(ExitCode::SUCCESS)
+}
+
+async fn handle_catalog(command: CatalogCommand, config: &Config) -> Result<ExitCode, String> {
+    match command {
+        CatalogCommand::List { state, json } => {
+            let snapshot = catalog::snapshot(&config.home)?;
+            if json {
+                match state {
+                    CatalogListState::Active => print_pretty(&snapshot.active)?,
+                    CatalogListState::Candidates => print_pretty(&snapshot.candidates)?,
+                    CatalogListState::Rejected => print_pretty(&snapshot.rejected)?,
+                    CatalogListState::All => print_pretty(&snapshot)?,
+                }
+            } else {
+                print_catalog_text(state, snapshot);
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        CatalogCommand::CreateCandidate {
+            id,
+            version,
+            description,
+            entrypoint,
+            script,
+            validation_command,
+            timeout_seconds,
+            overwrite,
+            json,
+        } => {
+            let created = catalog::create_candidate(
+                &config.home,
+                &CandidateDraft {
+                    id,
+                    version,
+                    description,
+                    entrypoint,
+                    script,
+                    validation_command,
+                    timeout_seconds,
+                    lineage: Some(SkillLineage {
+                        parent_id: None,
+                        source_trace: None,
+                        mutation_reason: Some(
+                            "created through greco catalog create-candidate".to_string(),
+                        ),
+                    }),
+                    overwrite,
+                },
+            )?;
+            print_json_or_text(
+                json,
+                &created,
+                format!(
+                    "candidate {} created at {}",
+                    created.key,
+                    created.path.display()
+                ),
+            )?;
+            Ok(ExitCode::SUCCESS)
+        }
+        CatalogCommand::Validate { id, json } => {
+            let path = catalog::find_candidate_dir(&config.home, &id)?;
+            let report = validation::validate_skill(&path, config).await?;
+            if json {
+                print_pretty(&report)?;
+            } else {
+                println!("{}", validation::render_report(&report));
+            }
+            Ok(if report.accepted {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(2)
+            })
+        }
+        CatalogCommand::Promote { id, json } => {
+            let path = catalog::find_candidate_dir(&config.home, &id)?;
+            let report = validation::validate_skill(&path, config).await?;
+            if !report.accepted {
+                if json {
+                    print_pretty(&report)?;
+                } else {
+                    println!("{}", validation::render_report(&report));
+                }
+                return Ok(ExitCode::from(2));
+            }
+            let promoted = catalog::promote_candidate(&config.home, &id)?;
+            print_json_or_text(
+                json,
+                &promoted,
+                format!("promoted {} to {}", promoted.key, promoted.to.display()),
+            )?;
+            Ok(ExitCode::SUCCESS)
+        }
+        CatalogCommand::Reject { id, reason, json } => {
+            let rejected = catalog::reject_candidate(&config.home, &id, reason)?;
+            print_json_or_text(
+                json,
+                &rejected,
+                format!("rejected {} to {}", rejected.key, rejected.to.display()),
+            )?;
+            Ok(ExitCode::SUCCESS)
+        }
+    }
+}
+
+fn print_catalog_text(state: CatalogListState, snapshot: catalog::CatalogSnapshot) {
+    match state {
+        CatalogListState::Active => print_entries("active", &snapshot.active),
+        CatalogListState::Candidates => print_entries("candidates", &snapshot.candidates),
+        CatalogListState::Rejected => print_entries("rejected", &snapshot.rejected),
+        CatalogListState::All => {
+            print_entries("candidates", &snapshot.candidates);
+            print_entries("active", &snapshot.active);
+            print_entries("rejected", &snapshot.rejected);
+        }
+    }
+}
+
+fn print_entries(label: &str, entries: &[catalog::SkillEntry]) {
+    if entries.is_empty() {
+        println!("No {label} skills.");
+        return;
+    }
+    for entry in entries {
+        println!(
+            "{} {} {} - {}",
+            state_label(&entry.state),
+            entry.id,
+            entry.version,
+            entry.description
+        );
+    }
+}
+
+fn state_label(state: &SkillState) -> &'static str {
+    match state {
+        SkillState::Candidate => "candidate",
+        SkillState::Active => "active",
+        SkillState::Rejected => "rejected",
+    }
+}
+
+fn print_json_or_text<T: serde::Serialize>(
+    json: bool,
+    value: &T,
+    text: String,
+) -> Result<(), String> {
+    if json {
+        print_pretty(value)
+    } else {
+        println!("{text}");
+        Ok(())
+    }
+}
+
+fn print_pretty<T: serde::Serialize>(value: &T) -> Result<(), String> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).map_err(|err| err.to_string())?
+    );
+    Ok(())
 }

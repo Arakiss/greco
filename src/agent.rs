@@ -59,6 +59,7 @@ pub async fn run_agent<P: ModelProvider>(
                 store: false,
                 include: vec![REASONING_INCLUDE.to_string()],
                 parallel_tool_calls: false,
+                text_format: None,
             })
             .await?;
 

@@ -23,6 +23,7 @@ pub struct ModelRequest {
     pub store: bool,
     pub include: Vec<String>,
     pub parallel_tool_calls: bool,
+    pub text_format: Option<Value>,
 }
 
 pub fn user_message(content: impl Into<String>) -> Value {
