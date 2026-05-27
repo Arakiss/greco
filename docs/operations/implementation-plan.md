@@ -30,7 +30,12 @@ Commands:
 - `greco --version`
 - `greco status --json`
 - `greco ask --input <text> [--max-turns <n>] [--stream]`
-- `greco catalog list --json`
+- `greco propose-skill --task <text> --json`
+- `greco catalog list --state all --json`
+- `greco catalog create-candidate --id <id> --description <text> --script <text> --validation-command <command>`
+- `greco catalog validate <candidate-id> --json`
+- `greco catalog promote <candidate-id> --json`
+- `greco catalog reject <candidate-id> --reason <text> --json`
 - `greco validate-skill <path> --json`
 - `greco tui --snapshot`
 
@@ -87,12 +92,15 @@ Build:
 - Validation trace JSONL.
 - Promotion gate.
 - Basic score file.
+- Structured OpenAI proposal path using Responses `text.format`.
+- Deterministic local candidate creation path for no-network dogfood.
 
 Exit criteria:
 
 - A fixture skill passes validation and promotes.
 - A failing skill is rejected and archived with trace.
 - Re-running validation is deterministic enough for local tests.
+- A live OpenAI proposal writes a candidate, source trace, validation trace, and promoted active skill.
 
 ## Phase 5: README and Private Remote
 
@@ -108,4 +116,4 @@ Exit criteria:
 - Secret scan is clean.
 - Remote is private.
 - `main` is pushed.
-- Optional `v0.2.0-alpha.1` tag is created only after the repo is verified.
+- Optional `v0.3.0-alpha.1` tag is created only after the repo is verified.

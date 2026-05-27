@@ -23,8 +23,17 @@
 - Candidate skill archive layout.
 - Promotion/rejection file moves.
 - Skill proposal structured output schema.
+- Proposal, validation, promotion, and rejection JSONL traces.
+- Score file with attempts, passes, failures, and lifecycle timestamps.
+- CLI lifecycle commands for create, validate, promote, reject, and list.
+- Live OpenAI proposal smoke using Responses `text.format`.
+
+## 0.4.0-alpha.1
+
+- Active skill invocation from `greco ask`.
+- Score-aware skill selection.
 - Multi-task validation fixtures.
-- Score file and catalog lint.
+- Catalog lint.
 - `greco report bundle --redact`.
 
 ## Beta Gate

@@ -109,15 +109,15 @@ Rejected candidates remain archived with failure traces.
 
 ## Validation Loop
 
-1. Candidate is written under `.greco/catalog/candidates/<candidate-id>/`.
+1. Candidate is written under `.greco/catalog/candidates/<skill-id>@<version>/`.
 2. Greco parses and statically validates the manifest.
 3. Greco creates a temp validation workspace.
 4. Greco invokes the candidate with bounded env, cwd, and timeout.
 5. Greco runs validation commands or checks declared expected outputs.
-6. Greco writes a JSONL trace.
+6. Greco writes JSONL proposal and validation traces.
 7. Greco promotes, rejects, or leaves the candidate pending.
 
-Promotion is a file move plus score update. No candidate is deleted during v0.
+Promotion and rejection are file moves plus score updates. No candidate is deleted during v0.
 
 ## Scoring
 
@@ -137,7 +137,8 @@ This is deliberately not a learned ranking model. Hundreds of skills may require
 Gommage's terminal dashboard proves that a dependency-free snapshot/watch style can be useful before a full interactive UI. Greco should start with:
 
 - `greco status --json`
-- `greco catalog list --json`
+- `greco catalog list --state all --json`
+- `greco propose-skill --task "..."`
 - `greco tui --snapshot`
 
 The first TUI should be plain text and agent-readable. Rich terminal interaction can come after the core loop proves useful.
@@ -168,4 +169,4 @@ Greco follows Semantic Versioning. While pre-1.0:
 - Compatible fixes use patch bumps.
 - Release notes should later be generated from Conventional Commits or release-please.
 
-Current alpha version: `0.2.0-alpha.1`.
+Current alpha version: `0.3.0-alpha.1`.
