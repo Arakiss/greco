@@ -168,4 +168,4 @@ Greco follows Semantic Versioning. While pre-1.0:
 - Compatible fixes use patch bumps.
 - Release notes should later be generated from Conventional Commits or release-please.
 
-Initial version: `0.1.0-alpha.1`.
+Current alpha version: `0.2.0-alpha.1`.

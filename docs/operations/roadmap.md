@@ -15,11 +15,13 @@
 - Full Responses tool loop.
 - Function-call output submission.
 - Session trajectory JSONL.
-- Candidate skill archive layout.
-- Promotion/rejection file moves.
+- Stateless reasoning preservation via `reasoning.encrypted_content` include.
+- Live smoke against OpenAI `gpt-5.4` using only ignored `.greco` artifacts.
 
 ## 0.3.0-alpha.1
 
+- Candidate skill archive layout.
+- Promotion/rejection file moves.
 - Skill proposal structured output schema.
 - Multi-task validation fixtures.
 - Score file and catalog lint.

@@ -29,7 +29,7 @@ Commands:
 
 - `greco --version`
 - `greco status --json`
-- `greco ask --input <text> [--stream]`
+- `greco ask --input <text> [--max-turns <n>] [--stream]`
 - `greco catalog list --json`
 - `greco validate-skill <path> --json`
 - `greco tui --snapshot`
@@ -50,6 +50,8 @@ Build:
 - Minimal function-tool schema generation for primitive tools.
 - `store: false` default.
 - `gpt-5.4` default from env/config.
+- Raw output item retention for stateless tool loops.
+- `reasoning.encrypted_content` include for reasoning item replay when `store: false`.
 
 Exit criteria:
 
@@ -60,6 +62,9 @@ Exit criteria:
 
 Build:
 
+- Responses function-call loop.
+- Function-call output submission.
+- Session trajectory JSONL under `.greco/traces/sessions`.
 - Workspace path guard.
 - UTF-8 read/write.
 - Simple edit by exact find/replace.
@@ -68,8 +73,10 @@ Build:
 Exit criteria:
 
 - Tests prove path traversal is rejected.
+- Tests prove model output items are preserved and tool outputs are returned.
 - Tests prove bash timeout handling.
 - Tests prove edit failure is explicit when the target text is absent.
+- One live OpenAI smoke task completes through write, read, and bash.
 
 ## Phase 4: Skill Catalog and Validation
 
@@ -101,4 +108,4 @@ Exit criteria:
 - Secret scan is clean.
 - Remote is private.
 - `main` is pushed.
-- Optional `v0.1.0-alpha.1` tag is created only after the repo is verified.
+- Optional `v0.2.0-alpha.1` tag is created only after the repo is verified.

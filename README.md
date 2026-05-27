@@ -9,14 +9,14 @@
   <a href="https://github.com/Arakiss/greco/actions/workflows/ci.yml"><img src="https://github.com/Arakiss/greco/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="rust-toolchain.toml"><img src="https://img.shields.io/badge/rust-1.90%2B-orange.svg" alt="Rust 1.90+"></a>
-  <a href="docs/architecture/design.md"><img src="https://img.shields.io/badge/status-alpha--scaffold-blue.svg" alt="Alpha scaffold"></a>
+  <a href="docs/architecture/design.md"><img src="https://img.shields.io/badge/status-alpha--tool--loop-blue.svg" alt="Alpha tool loop"></a>
 </p>
 
 # Greco
 
 > A Rust coding-agent harness whose evolutionary unit is the local skill catalog.
 
-**Development status: alpha scaffold.** Greco is private, early, and intentionally narrow. The current build proves the project shape: direct OpenAI Responses integration, a small provider seam, primitive tool definitions, local tool execution, skill manifests, empirical validation fixtures, and a plain-text TUI snapshot. It is not ready for unattended real-project use.
+**Development status: alpha tool loop.** Greco is private, early, and intentionally narrow. The current build can run a Responses API function-calling loop against OpenAI `gpt-5.4`: the model emits primitive tool calls, Greco executes them locally, returns `function_call_output` items, preserves raw output items for stateless turns, and writes JSONL session traces. It is not ready for unattended real-project use.
 
 Greco starts from the Kappa RFC thesis: the model is not retrained and the harness does not rewrite itself. Instead, the agent proposes skills, Greco validates them empirically, and only passing candidates enter the active catalog. Failed candidates stay archived because the archive is the memory substrate.
 
@@ -50,8 +50,7 @@ The core bet is practical:
 ```sh
 greco --version
 greco status --json
-greco ask --input "Explain this repository in one paragraph"
-greco ask --input "Hello" --stream
+greco ask --input "Read README.md and summarize the project" --max-turns 6
 greco tool read README.md
 greco tool write scratch.txt "hello"
 greco tool edit scratch.txt hello goodbye
@@ -61,7 +60,7 @@ greco validate-skill examples/skills/pass --json
 greco tui --snapshot
 ```
 
-`greco ask` uses OpenAI and requires `OPENAI_API_KEY`. Local smoke tests and skill validation do not require network access.
+`greco ask` uses OpenAI and requires `OPENAI_API_KEY`. It runs buffered even when `--stream` is passed, because streaming function-call orchestration needs a separate assembler for partial argument events. Each run prints the local trace path on stderr, for example `.greco/traces/sessions/<id>.jsonl`. Local tool commands and skill validation do not require network access.
 
 ## Install From Source
 
@@ -146,6 +145,7 @@ cargo test --workspace
 cargo run -- status --json
 cargo run -- validate-skill examples/skills/pass --json
 cargo run -- validate-skill examples/skills/fail --json
+cargo run -- ask --max-turns 6 --input "Use read on README.md, then answer with one sentence."
 ```
 
 Secret check:
@@ -159,11 +159,13 @@ git grep -n -E "sk-(proj|svcacct)-" -- . ':!docs/**'
 
 ```text
 src/
+  agent.rs             Responses tool loop and trajectory handoff
   main.rs              CLI dispatch
   cli.rs               manual argument parser
   config.rs            env and local config loading
   provider/            model-provider trait and OpenAI adapter
   tools.rs             primitive tool schemas and local execution
+  trajectory.rs        JSONL session traces
   catalog.rs           skill manifest and active catalog loading
   validation.rs        empirical skill validation scaffold
   tui.rs               plain-text operator snapshots
@@ -189,4 +191,4 @@ Those are future research vectors, not v0.
 
 ## Status Summary
 
-Greco currently proves the skeleton. The next serious milestone is closing the full tool loop: model emits primitive tool calls, Greco executes them, returns function-call outputs, and records a trajectory trace. Only after that should skill generation become autonomous.
+Greco now proves the core agent loop. The next serious milestone is autonomous skill proposal: the agent should package a repeated pattern as a candidate skill, Greco should validate it against bounded tasks, and the catalog should promote or reject it with retained traces.
