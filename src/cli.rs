@@ -7,7 +7,7 @@ Usage:
   greco --help
   greco --version
   greco status [--json]
-  greco ask --input <text> [--stream]
+  greco ask --input <text> [--max-turns <n>] [--stream]
   greco tool read <path>
   greco tool write <path> <content>
   greco tool edit <path> <find> <replace>
@@ -31,11 +31,22 @@ skill is not active until Greco validates it empirically.";
 pub enum Command {
     Help,
     Version,
-    Status { json: bool },
-    Ask { input: String, stream: bool },
+    Status {
+        json: bool,
+    },
+    Ask {
+        input: String,
+        stream: bool,
+        max_turns: usize,
+    },
     Tool(ToolCommand),
-    CatalogList { json: bool },
-    ValidateSkill { path: PathBuf, json: bool },
+    CatalogList {
+        json: bool,
+    },
+    ValidateSkill {
+        path: PathBuf,
+        json: bool,
+    },
     TuiSnapshot,
 }
 
@@ -91,6 +102,7 @@ pub fn parse_args(args: Vec<String>) -> Result<Command, String> {
 fn parse_ask(args: &[String]) -> Result<Command, String> {
     let mut input = None;
     let mut stream = false;
+    let mut max_turns = 8;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -99,6 +111,14 @@ fn parse_ask(args: &[String]) -> Result<Command, String> {
                 input = args.get(index).cloned();
             }
             "--stream" => stream = true,
+            "--max-turns" => {
+                index += 1;
+                max_turns = args
+                    .get(index)
+                    .ok_or_else(|| "--max-turns requires an integer".to_string())?
+                    .parse()
+                    .map_err(|_| "--max-turns must be an integer".to_string())?;
+            }
             other => return Err(format!("unknown ask option `{other}`")),
         }
         index += 1;
@@ -106,6 +126,7 @@ fn parse_ask(args: &[String]) -> Result<Command, String> {
     Ok(Command::Ask {
         input: input.ok_or_else(|| "`greco ask` requires --input <text>".to_string())?,
         stream,
+        max_turns,
     })
 }
 

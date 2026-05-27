@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::{fs, process::Command, time};
 
+use crate::provider::ToolCall;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolResult {
     pub success: bool,
@@ -61,7 +63,7 @@ pub fn primitive_tool_specs() -> Vec<Value> {
                 "type": "object",
                 "properties": {
                     "command": {"type": "string"},
-                    "timeout_seconds": {"type": "number"}
+                    "timeout_seconds": {"type": "integer"}
                 },
                 "required": ["command", "timeout_seconds"],
                 "additionalProperties": false
@@ -160,6 +162,64 @@ pub async fn run_bash(
     })
 }
 
+pub async fn execute_tool_call(workspace: &Path, call: &ToolCall) -> ToolResult {
+    let result = match call.name.as_str() {
+        "read" => match parse_args::<ReadArgs>(&call.arguments) {
+            Ok(args) => read_file(workspace, &args.path).await,
+            Err(err) => Err(err),
+        },
+        "write" => match parse_args::<WriteArgs>(&call.arguments) {
+            Ok(args) => write_file(workspace, &args.path, &args.content).await,
+            Err(err) => Err(err),
+        },
+        "edit" => match parse_args::<EditArgs>(&call.arguments) {
+            Ok(args) => edit_file(workspace, &args.path, &args.find, &args.replace).await,
+            Err(err) => Err(err),
+        },
+        "bash" => match parse_args::<BashArgs>(&call.arguments) {
+            Ok(args) => run_bash(workspace, &args.command, args.timeout_seconds).await,
+            Err(err) => Err(err),
+        },
+        _ => Err(format!("unknown tool `{}`", call.name)),
+    };
+
+    result.unwrap_or_else(|err| ToolResult {
+        success: false,
+        output: err,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct ReadArgs {
+    path: PathBuf,
+}
+
+#[derive(Debug, Deserialize)]
+struct WriteArgs {
+    path: PathBuf,
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct EditArgs {
+    path: PathBuf,
+    find: String,
+    replace: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct BashArgs {
+    command: String,
+    timeout_seconds: u64,
+}
+
+fn parse_args<T>(arguments: &str) -> Result<T, String>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    serde_json::from_str(arguments).map_err(|err| format!("invalid tool arguments: {err}"))
+}
+
 fn guarded_path(workspace: &Path, path: &Path) -> Result<PathBuf, String> {
     if path.is_absolute() {
         return Err("absolute paths are not allowed".to_string());
@@ -176,9 +236,89 @@ fn guarded_path(workspace: &Path, path: &Path) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider::ToolCall;
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     #[test]
     fn rejects_parent_traversal() {
         assert!(guarded_path(Path::new("/tmp/work"), Path::new("../secret")).is_err());
+    }
+
+    #[tokio::test]
+    async fn executes_tool_calls_against_workspace() {
+        let workspace = temp_dir("execute");
+        fs::create_dir_all(&workspace).unwrap();
+
+        let write = execute_tool_call(
+            &workspace,
+            &ToolCall {
+                call_id: "call_write".to_string(),
+                name: "write".to_string(),
+                arguments: "{\"path\":\"scratch.txt\",\"content\":\"hello\"}".to_string(),
+            },
+        )
+        .await;
+        assert!(write.success);
+
+        let edit = execute_tool_call(
+            &workspace,
+            &ToolCall {
+                call_id: "call_edit".to_string(),
+                name: "edit".to_string(),
+                arguments: "{\"path\":\"scratch.txt\",\"find\":\"hello\",\"replace\":\"goodbye\"}"
+                    .to_string(),
+            },
+        )
+        .await;
+        assert!(edit.success);
+
+        let bash = execute_tool_call(
+            &workspace,
+            &ToolCall {
+                call_id: "call_bash".to_string(),
+                name: "bash".to_string(),
+                arguments:
+                    "{\"command\":\"test \\\"$(cat scratch.txt)\\\" = \\\"goodbye\\\"\",\"timeout_seconds\":5}"
+                        .to_string(),
+            },
+        )
+        .await;
+        assert!(bash.success);
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[tokio::test]
+    async fn reports_edit_failure_when_text_is_absent() {
+        let workspace = temp_dir("edit-miss");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join("scratch.txt"), "hello").unwrap();
+
+        let result = edit_file(&workspace, Path::new("scratch.txt"), "missing", "replace").await;
+        assert_eq!(result.unwrap_err(), "edit target text not found");
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[tokio::test]
+    async fn reports_bash_timeout() {
+        let workspace = temp_dir("timeout");
+        fs::create_dir_all(&workspace).unwrap();
+
+        let result = run_bash(&workspace, "sleep 2", 1).await;
+        assert_eq!(result.unwrap_err(), "command timed out after 1s");
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        std::env::temp_dir().join(format!(
+            "greco-tools-test-{label}-{millis}-{}",
+            std::process::id()
+        ))
     }
 }

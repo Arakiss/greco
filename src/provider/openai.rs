@@ -26,9 +26,13 @@ impl OpenAiProvider {
             "store": request.store,
             "tools": request.tools,
             "stream": stream,
+            "parallel_tool_calls": request.parallel_tool_calls,
         });
         if let Some(instructions) = request.instructions {
             body["instructions"] = Value::String(instructions);
+        }
+        if !request.include.is_empty() {
+            body["include"] = json!(request.include);
         }
         body
     }
@@ -58,6 +62,7 @@ impl OpenAiProvider {
         Ok(value)
     }
 
+    #[allow(dead_code)]
     async fn post_stream(&self, body: Value) -> Result<String, String> {
         let mut response = self
             .client
@@ -117,15 +122,15 @@ pub fn parse_response(raw: Value) -> Result<ModelResponse, String> {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    let output_items = raw
+        .get("output")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let mut output_text = String::new();
     let mut tool_calls = Vec::new();
 
-    for item in raw
-        .get("output")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
+    for item in &output_items {
         match item.get("type").and_then(Value::as_str) {
             Some("message") => {
                 for content in item
@@ -168,6 +173,7 @@ pub fn parse_response(raw: Value) -> Result<ModelResponse, String> {
         id,
         output_text,
         tool_calls,
+        output_items,
         raw,
     })
 }

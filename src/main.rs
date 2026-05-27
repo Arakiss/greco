@@ -1,8 +1,10 @@
+mod agent;
 mod catalog;
 mod cli;
 mod config;
 mod provider;
 mod tools;
+mod trajectory;
 mod tui;
 mod validation;
 
@@ -10,7 +12,7 @@ use std::process::ExitCode;
 
 use cli::{Command, ToolCommand, parse_args};
 use config::Config;
-use provider::{ModelMessage, ModelProvider, ModelRequest, OpenAiProvider};
+use provider::OpenAiProvider;
 use serde_json::json;
 
 #[tokio::main]
@@ -60,24 +62,30 @@ async fn run() -> Result<ExitCode, String> {
             }
             Ok(ExitCode::SUCCESS)
         }
-        Command::Ask { input, stream } => {
+        Command::Ask {
+            input,
+            stream,
+            max_turns,
+        } => {
             let api_key = config.api_key.clone().ok_or_else(|| {
                 "OPENAI_API_KEY is missing; copy .env.example to .env.local".to_string()
             })?;
             let provider = OpenAiProvider::new(api_key, config.model.clone());
-            let request = ModelRequest {
-                instructions: Some(cli::SYSTEM_PROMPT.to_string()),
-                input: vec![ModelMessage::user(input)],
-                tools: tools::primitive_tool_specs(),
-                store: false,
-            };
             if stream {
-                let text = provider.stream_text(request).await?;
-                println!("{text}");
-            } else {
-                let response = provider.respond(request).await?;
-                println!("{}", response.output_text);
+                eprintln!(
+                    "greco: --stream is disabled for tool-loop correctness; running buffered"
+                );
             }
+            let outcome =
+                agent::run_agent(&provider, &config, input, agent::AgentOptions { max_turns })
+                    .await?;
+            println!("{}", outcome.output_text);
+            eprintln!(
+                "greco: trace={} turns={} tools={}",
+                outcome.trace_path.display(),
+                outcome.turns,
+                outcome.tool_calls
+            );
             Ok(ExitCode::SUCCESS)
         }
         Command::Tool(tool) => {
