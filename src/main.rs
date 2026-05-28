@@ -206,6 +206,19 @@ async fn handle_loop(command: LoopCommand, config: &Config) -> Result<ExitCode, 
             }
             Ok(ExitCode::SUCCESS)
         }
+        LoopCommand::Gate { since, json } => {
+            let report = loop_control::gate(&config.home, &since)?;
+            if json {
+                print_pretty(&report)?;
+            } else {
+                println!("{}", loop_control::render_gate_report(&report));
+            }
+            Ok(match report.verdict {
+                loop_control::LoopGateVerdict::Pass => ExitCode::SUCCESS,
+                loop_control::LoopGateVerdict::NeedsMoreData => ExitCode::from(2),
+                loop_control::LoopGateVerdict::Fail => ExitCode::from(3),
+            })
+        }
         LoopCommand::Freeze { reason, json } => {
             let report = loop_control::freeze(&config.home, reason)?;
             if json {

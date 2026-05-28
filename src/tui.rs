@@ -121,14 +121,18 @@ pub fn render_snapshot(config: &Config) -> Result<String, String> {
     } else {
         lines.push("latest loop decision: none".to_string());
     }
+    if let Ok(gate) = loop_control::gate(&config.home, "all") {
+        lines.push(format!("phase 3 gate: {:?} {}", gate.verdict, gate.reason));
+    }
     lines.extend([
         String::new(),
         "next".to_string(),
         "----".to_string(),
         "1. greco loop run --since all --dry-run --json".to_string(),
         "2. greco loop run --since all --apply --json".to_string(),
-        "3. greco loop status --json".to_string(),
-        "4. greco audit --since all".to_string(),
+        "3. greco loop gate --since all --json".to_string(),
+        "4. greco loop status --json".to_string(),
+        "5. greco audit --since all".to_string(),
     ]);
 
     Ok(lines.join("\n"))

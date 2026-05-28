@@ -1,4 +1,5 @@
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
     time::{Instant, SystemTime, UNIX_EPOCH},
@@ -173,6 +174,59 @@ pub struct LoopValidationSummary {
 pub struct LoopStatusReport {
     pub policy: LoopPolicy,
     pub state: LoopState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoopGateReport {
+    pub generated_at_unix_ms: u128,
+    pub since: String,
+    pub verdict: LoopGateVerdict,
+    pub reason: String,
+    pub signal: LoopGateSignal,
+    pub decisions: LoopGateDecisions,
+    pub comparisons: LoopGateComparisons,
+    pub budget: LoopBudgetSnapshot,
+    pub active_duplicate_payloads: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LoopGateVerdict {
+    Pass,
+    Fail,
+    NeedsMoreData,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoopGateSignal {
+    pub session_count: usize,
+    pub eval_run_count: usize,
+    pub objective_failures: u64,
+    pub repeated_errors: u64,
+    pub missing_tool_failures: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LoopGateDecisions {
+    pub considered: usize,
+    pub by_kind: BTreeMap<String, usize>,
+    pub applied_with_comparison: usize,
+    pub applied_without_comparison: usize,
+    pub kept_pareto: usize,
+    pub rejected: usize,
+    pub skipped_duplicate: usize,
+    pub frozen_budget: usize,
+    pub refused_frozen: usize,
+    pub rolled_back_regression: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LoopGateComparisons {
+    pub considered: usize,
+    pub by_outcome: BTreeMap<String, usize>,
+    pub best_primary_improvement_ppm: i64,
+    pub max_regression_ppm: i64,
+    pub latest_artifact_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -664,6 +718,54 @@ pub fn status(home: &Path) -> Result<LoopStatusReport, String> {
     })
 }
 
+pub fn gate(home: &Path, since: &str) -> Result<LoopGateReport, String> {
+    let audit_report = audit::build_window_report(home, since)?;
+    gate_from_audit(home, &audit_report)
+}
+
+pub fn gate_from_audit(home: &Path, audit_report: &AuditReport) -> Result<LoopGateReport, String> {
+    let policy = load_policy(home)?;
+    let state = load_state(home)?;
+    let generated_at_unix_ms = now_millis();
+    let cutoff_ms = since_cutoff_ms(&audit_report.since, generated_at_unix_ms)?;
+    let decisions = state
+        .decisions
+        .iter()
+        .filter(|decision| cutoff_ms.is_none_or(|cutoff| decision.at_unix_ms >= cutoff))
+        .cloned()
+        .collect::<Vec<_>>();
+    let decision_summary = summarize_gate_decisions(&decisions);
+    let comparison_summary = summarize_gate_comparisons(&decisions);
+    let active_duplicate_payloads = active_duplicate_payloads(home)?;
+    let signal = LoopGateSignal {
+        session_count: audit_report.session_count,
+        eval_run_count: audit_report.eval_run_count,
+        objective_failures: audit_report.metrics.objective_failures,
+        repeated_errors: audit_report.metrics.repeated_errors,
+        missing_tool_failures: audit_report.metrics.missing_tool_failures,
+    };
+    let budget = budget_snapshot(&state, &policy);
+    let (verdict, reason) = gate_verdict(
+        &policy,
+        &signal,
+        &decision_summary,
+        &comparison_summary,
+        active_duplicate_payloads,
+    );
+
+    Ok(LoopGateReport {
+        generated_at_unix_ms,
+        since: audit_report.since.clone(),
+        verdict,
+        reason,
+        signal,
+        decisions: decision_summary,
+        comparisons: comparison_summary,
+        budget,
+        active_duplicate_payloads,
+    })
+}
+
 pub fn freeze(home: &Path, reason: String) -> Result<LoopStatusReport, String> {
     let policy = load_policy(home)?;
     let mut state = load_state(home)?;
@@ -817,6 +919,238 @@ fn report(draft: LoopRunReportDraft) -> LoopRunReport {
         policy: draft.policy,
         state: draft.state,
     }
+}
+
+pub fn render_gate_report(report: &LoopGateReport) -> String {
+    [
+        format!("phase3_gate: {:?}", report.verdict),
+        format!("reason: {}", report.reason),
+        format!("since: {}", report.since),
+        format!(
+            "signal: sessions={} eval_runs={} objective_failures={} repeated_errors={} missing_tool_failures={}",
+            report.signal.session_count,
+            report.signal.eval_run_count,
+            report.signal.objective_failures,
+            report.signal.repeated_errors,
+            report.signal.missing_tool_failures
+        ),
+        format!(
+            "decisions: considered={} applied_with_comparison={} kept_pareto={} rejected={} skipped_duplicate={} frozen_budget={} refused_frozen={} rollback={}",
+            report.decisions.considered,
+            report.decisions.applied_with_comparison,
+            report.decisions.kept_pareto,
+            report.decisions.rejected,
+            report.decisions.skipped_duplicate,
+            report.decisions.frozen_budget,
+            report.decisions.refused_frozen,
+            report.decisions.rolled_back_regression
+        ),
+        format!(
+            "comparisons: considered={} best_primary_improvement_ppm={} max_regression_ppm={}",
+            report.comparisons.considered,
+            report.comparisons.best_primary_improvement_ppm,
+            report.comparisons.max_regression_ppm
+        ),
+        format!(
+            "budget: tokens {}/{} modifications {}/{} chained {}/{}",
+            report.budget.tokens_used,
+            report.budget.max_tokens_per_window,
+            report.budget.modifications_applied,
+            report.budget.max_modifications_per_window,
+            report.budget.chained_modifications,
+            report.budget.max_chained_modifications
+        ),
+        format!("active_duplicate_payloads: {}", report.active_duplicate_payloads),
+    ]
+    .join("\n")
+}
+
+fn summarize_gate_decisions(decisions: &[LoopDecision]) -> LoopGateDecisions {
+    let mut summary = LoopGateDecisions {
+        considered: decisions.len(),
+        ..Default::default()
+    };
+    for decision in decisions {
+        *summary
+            .by_kind
+            .entry(decision_kind_key(&decision.kind).to_string())
+            .or_insert(0) += 1;
+        match decision.kind {
+            LoopDecisionKind::Applied => {
+                if decision.comparison.is_some() {
+                    summary.applied_with_comparison += 1;
+                } else {
+                    summary.applied_without_comparison += 1;
+                }
+            }
+            LoopDecisionKind::KeptPareto => summary.kept_pareto += 1,
+            LoopDecisionKind::Rejected => summary.rejected += 1,
+            LoopDecisionKind::SkippedDuplicate => summary.skipped_duplicate += 1,
+            LoopDecisionKind::FrozenBudget => summary.frozen_budget += 1,
+            LoopDecisionKind::RefusedFrozen => summary.refused_frozen += 1,
+            LoopDecisionKind::RolledBackRegression => summary.rolled_back_regression += 1,
+            LoopDecisionKind::WouldApply
+            | LoopDecisionKind::OperatorFrozen
+            | LoopDecisionKind::OperatorUnfrozen => {}
+        }
+    }
+    summary
+}
+
+fn summarize_gate_comparisons(decisions: &[LoopDecision]) -> LoopGateComparisons {
+    let mut summary = LoopGateComparisons::default();
+    for comparison in decisions
+        .iter()
+        .filter_map(|decision| decision.comparison.as_ref())
+    {
+        summary.considered += 1;
+        *summary
+            .by_outcome
+            .entry(comparison_outcome_key(&comparison.outcome).to_string())
+            .or_insert(0) += 1;
+        summary.best_primary_improvement_ppm = summary
+            .best_primary_improvement_ppm
+            .max(comparison.primary_improvement_ppm);
+        summary.max_regression_ppm = summary
+            .max_regression_ppm
+            .max(comparison.max_regression_ppm);
+        summary.latest_artifact_path = comparison.artifact_path.clone();
+    }
+    summary
+}
+
+fn gate_verdict(
+    policy: &LoopPolicy,
+    signal: &LoopGateSignal,
+    decisions: &LoopGateDecisions,
+    comparisons: &LoopGateComparisons,
+    active_duplicate_payloads: usize,
+) -> (LoopGateVerdict, String) {
+    if signal.session_count < 10 || signal.eval_run_count < 5 {
+        return (
+            LoopGateVerdict::NeedsMoreData,
+            format!(
+                "need at least 10 sessions and 5 eval runs; observed {} sessions and {} eval runs",
+                signal.session_count, signal.eval_run_count
+            ),
+        );
+    }
+    if active_duplicate_payloads > 0 {
+        return (
+            LoopGateVerdict::Fail,
+            format!(
+                "active modification catalog has {active_duplicate_payloads} duplicate payloads"
+            ),
+        );
+    }
+    if signal.objective_failures > 0
+        || signal.repeated_errors > 0
+        || signal.missing_tool_failures > 0
+    {
+        return (
+            LoopGateVerdict::Fail,
+            format!(
+                "protected regression signals present: objective_failures={} repeated_errors={} missing_tool_failures={}",
+                signal.objective_failures, signal.repeated_errors, signal.missing_tool_failures
+            ),
+        );
+    }
+    if comparisons.considered == 0 {
+        return (
+            LoopGateVerdict::NeedsMoreData,
+            "no comparative loop decisions recorded in this window".to_string(),
+        );
+    }
+    if decisions.applied_without_comparison > 0 && decisions.applied_with_comparison == 0 {
+        return (
+            LoopGateVerdict::NeedsMoreData,
+            "only legacy applied decisions exist; no applied decision carries comparison evidence"
+                .to_string(),
+        );
+    }
+
+    let improvement_threshold = ratio_to_ppm(policy.thresholds.min_relative_improvement) as i64;
+    let regression_tolerance = ratio_to_ppm(policy.thresholds.regression_tolerance) as i64;
+    if decisions.applied_with_comparison > 0
+        && comparisons.best_primary_improvement_ppm >= improvement_threshold
+        && comparisons.max_regression_ppm <= regression_tolerance
+    {
+        return (
+            LoopGateVerdict::Pass,
+            format!(
+                "applied comparative decision met primary threshold {}ppm with max regression {}ppm",
+                improvement_threshold, comparisons.max_regression_ppm
+            ),
+        );
+    }
+
+    (
+        LoopGateVerdict::NeedsMoreData,
+        format!(
+            "no applied comparative decision met the primary threshold; best_primary_improvement_ppm={} threshold_ppm={} kept_pareto={} rejected={}",
+            comparisons.best_primary_improvement_ppm,
+            improvement_threshold,
+            decisions.kept_pareto,
+            decisions.rejected
+        ),
+    )
+}
+
+fn active_duplicate_payloads(home: &Path) -> Result<usize, String> {
+    let mut seen = BTreeSet::new();
+    let mut duplicates = 0;
+    for entry in modification::list_entries(home, ModificationState::Active)? {
+        let (_, manifest) = modification::read_by_id(home, &entry.id)?;
+        let key = serde_json::to_string(&manifest.payload).map_err(|err| err.to_string())?;
+        if !seen.insert(key) {
+            duplicates += 1;
+        }
+    }
+    Ok(duplicates)
+}
+
+fn decision_kind_key(kind: &LoopDecisionKind) -> &'static str {
+    match kind {
+        LoopDecisionKind::WouldApply => "would_apply",
+        LoopDecisionKind::Applied => "applied",
+        LoopDecisionKind::Rejected => "rejected",
+        LoopDecisionKind::KeptPareto => "kept_pareto",
+        LoopDecisionKind::SkippedDuplicate => "skipped_duplicate",
+        LoopDecisionKind::RefusedFrozen => "refused_frozen",
+        LoopDecisionKind::FrozenBudget => "frozen_budget",
+        LoopDecisionKind::RolledBackRegression => "rolled_back_regression",
+        LoopDecisionKind::OperatorFrozen => "operator_frozen",
+        LoopDecisionKind::OperatorUnfrozen => "operator_unfrozen",
+    }
+}
+
+fn comparison_outcome_key(outcome: &LoopComparisonOutcome) -> &'static str {
+    match outcome {
+        LoopComparisonOutcome::Apply => "apply",
+        LoopComparisonOutcome::KeepPareto => "keep_pareto",
+        LoopComparisonOutcome::Reject => "reject",
+    }
+}
+
+fn since_cutoff_ms(since: &str, now: u128) -> Result<Option<u128>, String> {
+    let trimmed = since.trim();
+    if trimmed.eq_ignore_ascii_case("all") {
+        return Ok(None);
+    }
+    if trimmed.len() < 2 {
+        return Err("since must be all, or a duration like 24h, 7d, 30m".to_string());
+    }
+    let (number, unit) = trimmed.split_at(trimmed.len() - 1);
+    let value: u128 = number
+        .parse()
+        .map_err(|_| "since duration must start with an integer".to_string())?;
+    let millis = match unit {
+        "m" => value * 60 * 1_000,
+        "h" => value * 60 * 60 * 1_000,
+        "d" => value * 24 * 60 * 60 * 1_000,
+        _ => return Err("since unit must be m, h, d, or all".to_string()),
+    };
+    Ok(Some(now.saturating_sub(millis)))
 }
 
 enum CandidateSelection {
@@ -1118,16 +1452,7 @@ fn push_decision(
         since: since.to_string(),
         modification_id,
         reason,
-        budget: LoopBudgetSnapshot {
-            tokens_used: state.tokens_used,
-            max_tokens_per_window: policy.budgets.max_tokens_per_window,
-            validation_wall_ms_used: state.validation_wall_ms_used,
-            max_wall_seconds_per_validation: policy.budgets.max_wall_seconds_per_validation,
-            modifications_applied: state.modifications_applied,
-            max_modifications_per_window: policy.budgets.max_modifications_per_window,
-            chained_modifications: state.chained_modifications,
-            max_chained_modifications: policy.budgets.max_chained_modifications,
-        },
+        budget: budget_snapshot(state, policy),
         comparison,
     };
     state.decisions.push(decision.clone());
@@ -1135,6 +1460,19 @@ fn push_decision(
         state.decisions.remove(0);
     }
     decision
+}
+
+fn budget_snapshot(state: &LoopState, policy: &LoopPolicy) -> LoopBudgetSnapshot {
+    LoopBudgetSnapshot {
+        tokens_used: state.tokens_used,
+        max_tokens_per_window: policy.budgets.max_tokens_per_window,
+        validation_wall_ms_used: state.validation_wall_ms_used,
+        max_wall_seconds_per_validation: policy.budgets.max_wall_seconds_per_validation,
+        modifications_applied: state.modifications_applied,
+        max_modifications_per_window: policy.budgets.max_modifications_per_window,
+        chained_modifications: state.chained_modifications,
+        max_chained_modifications: policy.budgets.max_chained_modifications,
+    }
 }
 
 fn budget_refusal_reason(state: &LoopState, policy: &LoopPolicy) -> Option<String> {
@@ -1201,9 +1539,61 @@ fn now_millis() -> u128 {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, path::PathBuf};
 
     use super::*;
+
+    #[test]
+    fn gate_passes_with_applied_comparative_improvement() {
+        let root = temp_dir("gate-pass");
+        let home = root.join(".greco");
+        seed_gate_signal(&home);
+        let mut state = LoopState {
+            modifications_applied: 1,
+            ..Default::default()
+        };
+        state.decisions.push(test_decision(
+            LoopDecisionKind::Applied,
+            Some(test_comparison(LoopComparisonOutcome::Apply, 100_000, 0)),
+        ));
+        save_state(&home, &state).unwrap();
+
+        let report = gate(&home, "all").unwrap();
+
+        assert_eq!(report.verdict, LoopGateVerdict::Pass);
+        assert_eq!(report.decisions.applied_with_comparison, 1);
+        assert!(report.reason.contains("met primary threshold"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn gate_fails_with_active_duplicate_payloads() {
+        let root = temp_dir("gate-fail-duplicates");
+        let home = root.join(".greco");
+        seed_gate_signal(&home);
+        seed_active_modification_with_id(&home, "layer-a-one");
+        seed_active_modification_with_id(&home, "layer-a-two");
+        save_state(&home, &LoopState::default()).unwrap();
+
+        let report = gate(&home, "all").unwrap();
+
+        assert_eq!(report.verdict, LoopGateVerdict::Fail);
+        assert_eq!(report.active_duplicate_payloads, 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn gate_requires_comparative_window_data() {
+        let root = temp_dir("gate-insufficient");
+        let home = root.join(".greco");
+        save_state(&home, &LoopState::default()).unwrap();
+
+        let report = gate(&home, "all").unwrap();
+
+        assert_eq!(report.verdict, LoopGateVerdict::NeedsMoreData);
+        assert!(report.reason.contains("need at least 10 sessions"));
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[tokio::test]
     async fn dry_run_validates_without_applying() {
@@ -1444,6 +1834,91 @@ mod tests {
         .unwrap();
     }
 
+    fn seed_gate_signal(home: &Path) {
+        let sessions = home.join("traces").join("sessions");
+        fs::create_dir_all(&sessions).unwrap();
+        for index in 0..10 {
+            fs::write(
+                sessions.join(format!("session-{index}.jsonl")),
+                format!(
+                    r#"{{"ts_unix_ms":{},"event":"friction_summary","data":{{"turns":2,"tool_calls":1,"tokens":1000,"repeated_errors":0,"retracements":0,"avoidable_prompts":0,"missing_tool_failures":0,"objective_success":true}}}}"#,
+                    1_000 + index
+                ),
+            )
+            .unwrap();
+        }
+        let runs = home.join("eval").join("runs");
+        fs::create_dir_all(&runs).unwrap();
+        for index in 0..5 {
+            fs::write(
+                runs.join(format!("{}-demo-{index}.json", 1_000 + index)),
+                format!(
+                    r#"{{"task":{{"id":"demo-{index}","title":"Demo","kind":"search","criteria":1}},"success":true,"generated_at_unix_ms":{},"wall_ms":100,"criteria":[{{"id":"ok","command":"true","success":true,"exit_code":0,"timed_out":false,"wall_ms":100,"output":""}}],"run_path":null}}"#,
+                    1_000 + index
+                ),
+            )
+            .unwrap();
+        }
+    }
+
+    fn test_decision(kind: LoopDecisionKind, comparison: Option<LoopComparison>) -> LoopDecision {
+        LoopDecision {
+            id: format!("decision-{}", now_millis()),
+            kind,
+            at_unix_ms: now_millis(),
+            since: "all".to_string(),
+            modification_id: Some("layer-a-test".to_string()),
+            reason: "test decision".to_string(),
+            budget: LoopBudgetSnapshot {
+                tokens_used: 0,
+                max_tokens_per_window: 100_000,
+                validation_wall_ms_used: 0,
+                max_wall_seconds_per_validation: 300,
+                modifications_applied: 1,
+                max_modifications_per_window: 2,
+                chained_modifications: 1,
+                max_chained_modifications: 2,
+            },
+            comparison,
+        }
+    }
+
+    fn test_comparison(
+        outcome: LoopComparisonOutcome,
+        primary_improvement_ppm: i64,
+        max_regression_ppm: i64,
+    ) -> LoopComparison {
+        LoopComparison {
+            id: format!("comparison-{}", now_millis()),
+            artifact_path: Some(PathBuf::from(".greco/state/comparisons/test.json")),
+            primary_metric: LoopPrimaryMetric::ObjectiveSuccessRate,
+            baseline: LoopMetricSnapshot {
+                run_count: 5,
+                success_count: 4,
+                failure_count: 1,
+                total_wall_ms: 500,
+                average_wall_ms: 100,
+                objective_success_rate_ppm: 800_000,
+                estimated_tokens: 0,
+            },
+            candidate: LoopMetricSnapshot {
+                run_count: 5,
+                success_count: 5,
+                failure_count: 0,
+                total_wall_ms: 400,
+                average_wall_ms: 80,
+                objective_success_rate_ppm: 1_000_000,
+                estimated_tokens: 100,
+            },
+            primary_improvement_ppm,
+            max_regression_ppm,
+            min_relative_improvement_ppm: 50_000,
+            regression_tolerance_ppm: 10_000,
+            outcome,
+            reason: "test comparison".to_string(),
+        }
+    }
+
     fn seed_success_trace(home: &Path) {
         seed_trace(
             home,
@@ -1465,14 +1940,18 @@ mod tests {
     }
 
     fn seed_active_modification(home: &Path) {
-        let active_dir = home
-            .join("modifications")
-            .join("active")
-            .join("layer-a-test");
+        seed_active_modification_with_id(home, "layer-a-test");
+    }
+
+    fn seed_active_modification_with_id(home: &Path, id: &str) {
+        let active_dir = home.join("modifications").join("active").join(id);
         fs::create_dir_all(&active_dir).unwrap();
         fs::write(
             active_dir.join("manifest.json"),
-            r#"{"id":"layer-a-test","version":"0.1.0","layer":"a","state":"active","description":"test active cached procedure","friction_source":{"since":"all","session_count":1,"eval_run_count":1,"dominant_signal":"high-token-use","turns":2,"tool_calls":1,"tokens":5000,"repeated_errors":0,"retracements":0,"avoidable_prompts":0,"missing_tool_failures":0},"payload":{"kind":"cached_procedure","title":"Reduce high token use","body":"Read small files first.","prompt_budget_chars":1200},"validation":null,"lineage":{"parent_id":null,"reason":"test fixture"},"rollback":null,"created_at_unix_ms":1,"applied_at_unix_ms":2,"reverted_at_unix_ms":null}"#,
+            format!(
+                r#"{{"id":"{}","version":"0.1.0","layer":"a","state":"active","description":"test active cached procedure","friction_source":{{"since":"all","session_count":1,"eval_run_count":1,"dominant_signal":"high-token-use","turns":2,"tool_calls":1,"tokens":5000,"repeated_errors":0,"retracements":0,"avoidable_prompts":0,"missing_tool_failures":0}},"payload":{{"kind":"cached_procedure","title":"Reduce high token use","body":"Read small files first.","prompt_budget_chars":1200}},"validation":null,"lineage":{{"parent_id":null,"reason":"test fixture"}},"rollback":null,"created_at_unix_ms":1,"applied_at_unix_ms":2,"reverted_at_unix_ms":null}}"#,
+                id
+            ),
         )
         .unwrap();
     }

@@ -187,6 +187,11 @@ pub fn render_markdown(report: &AuditReport) -> String {
                 lines.push(rendered);
             }
         }
+        lines.push(String::new());
+        lines.push(format!(
+            "Phase 3 gate: run `greco loop gate --since {}` for the deterministic acceptance verdict.",
+            report.since
+        ));
     } else {
         lines.push("No autonomous loop state found.".to_string());
     }

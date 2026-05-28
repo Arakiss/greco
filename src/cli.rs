@@ -29,6 +29,7 @@ Usage:
   greco modification revert <id> [--json]
   greco loop run --since <all|24h|7d|30m> [--dry-run|--apply] [--json]
   greco loop status [--json]
+  greco loop gate --since <all|24h|7d|30m> [--json]
   greco loop freeze --reason <text> [--json]
   greco loop unfreeze [--json]
   greco audit --since <all|24h|7d|30m> [--json]
@@ -206,6 +207,10 @@ pub enum LoopCommand {
     Status {
         json: bool,
     },
+    Gate {
+        since: String,
+        json: bool,
+    },
     Freeze {
         reason: String,
         json: bool,
@@ -337,12 +342,13 @@ fn parse_loop(args: &[String]) -> Result<Command, String> {
         Some("status") => Ok(Command::Loop(LoopCommand::Status {
             json: args.iter().any(|arg| arg == "--json"),
         })),
+        Some("gate") => parse_loop_gate(&args[1..]),
         Some("freeze") => parse_loop_freeze(&args[1..]),
         Some("unfreeze") => Ok(Command::Loop(LoopCommand::Unfreeze {
             json: args.iter().any(|arg| arg == "--json"),
         })),
         Some(other) => Err(format!("unknown loop command `{other}`")),
-        None => Err("expected `greco loop <run|status|freeze|unfreeze>`".to_string()),
+        None => Err("expected `greco loop <run|status|gate|freeze|unfreeze>`".to_string()),
     }
 }
 
@@ -379,6 +385,27 @@ fn parse_loop_run(args: &[String]) -> Result<Command, String> {
         return Err("choose only one of --dry-run or --apply".to_string());
     }
     Ok(Command::Loop(LoopCommand::Run { since, mode, json }))
+}
+
+fn parse_loop_gate(args: &[String]) -> Result<Command, String> {
+    let mut since = "all".to_string();
+    let mut json = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--since" => {
+                index += 1;
+                since = args
+                    .get(index)
+                    .cloned()
+                    .ok_or_else(|| "--since requires all, or a duration like 24h".to_string())?;
+            }
+            "--json" => json = true,
+            other => return Err(format!("unknown loop gate option `{other}`")),
+        }
+        index += 1;
+    }
+    Ok(Command::Loop(LoopCommand::Gate { since, json }))
 }
 
 fn parse_loop_freeze(args: &[String]) -> Result<Command, String> {
@@ -848,6 +875,24 @@ mod tests {
             Command::Loop(LoopCommand::Run {
                 since: "all".to_string(),
                 mode: LoopRunMode::Apply,
+                json: true,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_loop_gate() {
+        assert_eq!(
+            parse_args(vec![
+                "loop".into(),
+                "gate".into(),
+                "--since".into(),
+                "24h".into(),
+                "--json".into(),
+            ])
+            .unwrap(),
+            Command::Loop(LoopCommand::Gate {
+                since: "24h".to_string(),
                 json: true,
             })
         );
