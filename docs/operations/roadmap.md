@@ -46,7 +46,7 @@ Outcome: loop closes. Critical review concludes the skill axis does not test the
 
 Decision gate: baseline friction signals stable enough for 5% delta detection.
 
-### 0.5.0-alpha.1 — Proposal pass with manual application (Phase 2)
+### Next alpha — Proposal pass with manual application (Phase 2)
 
 - Rewritten `proposal`, `catalog`, `validation` modules.
 - Subagent loader.
@@ -55,7 +55,7 @@ Decision gate: baseline friction signals stable enough for 5% delta detection.
 
 Decision gate: proposal precision and at least one applied modification moves the suite.
 
-### 0.6.0-alpha.1 — Autonomous loop on A and S1 (Phase 3, v0 acceptance gate)
+### Later alpha — Autonomous loop on A and S1 (Phase 3, v0 acceptance gate)
 
 - Budget enforcement.
 - Threshold logic.
@@ -65,13 +65,13 @@ Decision gate: proposal precision and at least one applied modification moves th
 
 Decision gate: one audit window of autonomous operation shows measurable aggregate friction reduction. This is the v0 acceptance gate. If it fails, the project closes per RFC Appendix B.
 
-### 0.7.0-alpha.1 — Higher layers under audit (Phase 4)
+### Later alpha — Higher layers under audit (Phase 4)
 
 - Layers B, C, S2, S3 autonomous within stricter thresholds.
 - Layer D (system prompt) with mandatory pre-application diff in audit.
 - Layer E (settings, hooks, permissions) explicit operator approval per modification.
 
-### 0.8.0-alpha.1 — Second-project validation and bundle (Phase 5)
+### Later alpha — Second-project validation and bundle (Phase 5)
 
 - Replication on a second operator project with its own suite.
 - Catalog lint.
@@ -90,9 +90,12 @@ Decision gate: one audit window of autonomous operation shows measurable aggrega
 
 Pre-1.0 semantic versioning:
 
-- Breaking CLI, trace schema, manifest schema, suite schema, or provider trait changes require a minor bump.
-- Compatible fixes use patch bumps.
-- Each minor in the alpha series corresponds to a numbered Phase in the implementation plan.
+- A numbered phase is not automatically a minor version.
+- Version bumps happen only at a release gate, after the diff has a defensible public contract.
+- Breaking or materially new CLI, trace schema, manifest schema, suite schema, provider trait, or archive lifecycle behavior can justify a minor pre-release.
+- Compatible fixes use patch pre-releases.
+- Experimental checkpoints that are not ready to be a release stay unversioned in `main`.
+- Future roadmap entries name phases, not promised version numbers. The release commit chooses the exact SemVer and records why in the commit trailers.
 
 ## Honest closure clause
 

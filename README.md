@@ -133,7 +133,7 @@ GRECO_MODEL=gpt-5.4
 GRECO_HOME=.greco
 ```
 
-The initial API key used during project creation was provided in chat and must be rotated before any public release.
+Any API key copied through an untrusted channel must be rotated before public release.
 
 ## Modification Lifecycle
 

@@ -302,7 +302,9 @@ JSON output is always available alongside human-readable output.
 
 Semantic Versioning. Pre-1.0:
 
-- Breaking CLI, trace schema, manifest schema, suite schema, or provider trait changes require a minor bump.
-- Compatible fixes use patch bumps.
+- minor pre-releases only when the release changes the public contract in a way worth naming: CLI surface, trace schema, manifest schema, suite schema, provider trait, or archive lifecycle behavior;
+- patch pre-releases for compatible fixes;
+- alpha/beta suffix until the Phase 3 acceptance gate passes;
+- roadmap phases are planning units, not automatic version numbers.
 
-The alpha cycle so far (`0.1.0-alpha.1` through `0.3.0-alpha.1`) covered the skill-axis exploration. The next minor version begins the recalibrated work: `0.4.0-alpha.1` and onward correspond to Phase 1 of the implementation plan.
+The alpha cycle so far (`0.1.0-alpha.1` through `0.3.0-alpha.1`) covered the skill-axis exploration. `0.4.0-alpha.1` begins the recalibrated work because it introduces a materially new eval/audit/instrumentation surface. Later phase work receives a version only at its release gate.
