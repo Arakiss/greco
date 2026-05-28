@@ -75,6 +75,13 @@ Decision gate: one audit window of autonomous operation shows measurable aggrega
 - Duplicate equivalent proposals are rejected or reused so active/pending procedure payloads do not multiply silently.
 - Audit and TUI snapshots expose comparison outcomes, primary improvement, maximum regression, and decision reasons.
 
+### 0.7.0-alpha.1 — Phase 3 acceptance gate
+
+- Public command: `greco loop gate --since <window> [--json]`.
+- Deterministic verdicts: `pass`, `fail`, or `needs_more_data`.
+- Gate evidence summarizes decisions by kind, comparison outcomes, budget consumption, protected regression signals, active duplicate health, and the best primary metric delta.
+- The gate does not pass from wall-time-only Pareto movement; it requires applied comparative evidence with primary-metric improvement.
+
 ### Later alpha — Higher layers under audit (Phase 4)
 
 - Layers B, C, S2, S3 autonomous within stricter thresholds.

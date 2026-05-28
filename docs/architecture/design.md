@@ -287,13 +287,14 @@ The plain-text snapshot pattern persists. Operator commands the system mostly th
 - `greco propose --since <window>` (manual trigger of the proposal pass)
 - `greco loop run --since <window> [--dry-run|--apply]`
 - `greco loop status [--json]`
+- `greco loop gate --since <window> [--json]`
 - `greco loop freeze --reason <text>`
 - `greco loop unfreeze`
 - `greco ask --input <text>` (regular agent use)
 - `greco tui --snapshot`
 
 JSON output is always available alongside human-readable output.
-Loop decisions include a comparison block once validation has run. The block records the baseline eval snapshot, candidate validation snapshot, primary improvement, maximum protected regression, threshold values, outcome, reason, and a `.greco/state/comparisons/*.json` artifact path. Apply mode is admitted only for `outcome=apply`; inconclusive or Pareto-only candidates remain unapplied.
+Loop decisions include a comparison block once validation has run. The block records the baseline eval snapshot, candidate validation snapshot, primary improvement, maximum protected regression, threshold values, outcome, reason, and a `.greco/state/comparisons/*.json` artifact path. Apply mode is admitted only for `outcome=apply`; inconclusive or Pareto-only candidates remain unapplied. `greco loop gate` reduces a window to `pass`, `fail`, or `needs_more_data` and refuses to pass from wall-time-only Pareto movement.
 
 ## Non-Goals
 
@@ -315,4 +316,4 @@ Semantic Versioning. Pre-1.0:
 - alpha/beta suffix until the Phase 3 acceptance gate passes;
 - roadmap phases are planning units, not automatic version numbers.
 
-The alpha cycle so far (`0.1.0-alpha.1` through `0.3.0-alpha.1`) covered the skill-axis exploration. `0.4.0-alpha.1` begins the recalibrated work because it introduces a materially new eval/audit/instrumentation surface. `0.5.0-alpha.1` is justified by the new modification CLI and persistent manifest format, not by the Phase 2 label alone. `0.6.0-alpha.1` is justified by the bounded autonomous loop surface and persistent budget/freeze/checkpoint state. `0.6.1-alpha.1` is a compatible Phase 3 patch because it extends loop/audit JSON with comparative admission evidence and tightens apply behavior without adding commands. Later phase work receives a version only at its release gate.
+The alpha cycle so far (`0.1.0-alpha.1` through `0.3.0-alpha.1`) covered the skill-axis exploration. `0.4.0-alpha.1` begins the recalibrated work because it introduces a materially new eval/audit/instrumentation surface. `0.5.0-alpha.1` is justified by the new modification CLI and persistent manifest format, not by the Phase 2 label alone. `0.6.0-alpha.1` is justified by the bounded autonomous loop surface and persistent budget/freeze/checkpoint state. `0.6.1-alpha.1` is a compatible Phase 3 patch because it extends loop/audit JSON with comparative admission evidence and tightens apply behavior without adding commands. `0.7.0-alpha.1` is justified by the new public `greco loop gate` acceptance surface. Later phase work receives a version only at its release gate.
