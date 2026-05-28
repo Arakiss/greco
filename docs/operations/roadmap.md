@@ -68,6 +68,13 @@ Decision gate: proposal precision and at least one applied modification moves th
 
 Decision gate: one audit window of autonomous operation shows measurable aggregate friction reduction. This is the v0 acceptance gate. If it fails, the project closes per RFC Appendix B.
 
+### 0.6.1-alpha.1 — Comparative admission patch (Phase 3)
+
+- Loop decisions persist baseline-vs-candidate comparison artifacts under `.greco/state/comparisons/`.
+- Threshold logic gates apply mode through objective-success deltas and protected regression tolerance instead of pass/fail validation alone.
+- Duplicate equivalent proposals are rejected or reused so active/pending procedure payloads do not multiply silently.
+- Audit and TUI snapshots expose comparison outcomes, primary improvement, maximum regression, and decision reasons.
+
 ### Later alpha — Higher layers under audit (Phase 4)
 
 - Layers B, C, S2, S3 autonomous within stricter thresholds.
