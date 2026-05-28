@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use crate::{
     eval::EvalRunReport,
+    loop_control::{self, LoopAuditSnapshot},
     modification::{self, ModificationEntry},
 };
 
@@ -21,6 +22,7 @@ pub struct AuditReport {
     pub metrics: AuditMetrics,
     pub eval_runs: Vec<AuditEvalRun>,
     pub modifications: AuditModifications,
+    pub loop_state: Option<LoopAuditSnapshot>,
     pub signal_assessment: String,
     pub report_paths: Option<AuditReportPaths>,
 }
@@ -125,9 +127,49 @@ pub fn render_markdown(report: &AuditReport) -> String {
         format!("- Rejected: {}", report.modifications.rejected.len()),
         format!("- Retired: {}", report.modifications.retired.len()),
         String::new(),
-        "## Eval Baseline".to_string(),
+        "## Autonomous Loop".to_string(),
         String::new(),
     ];
+
+    if let Some(loop_state) = &report.loop_state {
+        lines.extend([
+            format!("- Frozen: {}", loop_state.frozen),
+            format!(
+                "- Freeze reason: {}",
+                loop_state.freeze_reason.as_deref().unwrap_or("none")
+            ),
+            format!("- Tokens used: {}", loop_state.tokens_used),
+            format!(
+                "- Modifications applied: {}",
+                loop_state.modifications_applied
+            ),
+            format!(
+                "- Chained modifications: {}",
+                loop_state.chained_modifications
+            ),
+            format!("- Decisions recorded: {}", loop_state.decision_count),
+        ]);
+        if let Some(decision) = &loop_state.latest_decision {
+            lines.push(format!(
+                "- Latest decision: {:?} {}",
+                decision.kind, decision.reason
+            ));
+        }
+        if !loop_state.recent_decisions.is_empty() {
+            lines.push(String::new());
+            lines.push("Recent loop decisions:".to_string());
+            for decision in &loop_state.recent_decisions {
+                lines.push(format!(
+                    "- {:?} {} ({})",
+                    decision.kind, decision.id, decision.reason
+                ));
+            }
+        }
+    } else {
+        lines.push("No autonomous loop state found.".to_string());
+    }
+
+    lines.extend([String::new(), "## Eval Baseline".to_string(), String::new()]);
 
     if report.eval_runs.is_empty() {
         lines.push("No eval runs found in this window.".to_string());
@@ -184,6 +226,7 @@ fn build_window_report_at(
         rejected: modification_snapshot.rejected,
         retired: modification_snapshot.retired,
     };
+    let loop_state = loop_control::audit_snapshot(home)?;
     let signal_assessment = assess_signal(session_count, eval_runs.len());
     Ok(AuditReport {
         generated_at_unix_ms,
@@ -193,6 +236,7 @@ fn build_window_report_at(
         metrics,
         eval_runs,
         modifications,
+        loop_state,
         signal_assessment,
         report_paths: None,
     })

@@ -1,6 +1,6 @@
 use std::fs;
 
-use crate::{catalog::Catalog, config::Config, eval, modification};
+use crate::{catalog::Catalog, config::Config, eval, loop_control, modification};
 
 pub fn render_status(config: &Config) -> String {
     [
@@ -80,13 +80,43 @@ pub fn render_snapshot(config: &Config) -> Result<String, String> {
             lines.push(format!("- {} :: {}", entry.id, entry.description));
         }
     }
+    let loop_status = loop_control::status(&config.home)?;
+    lines.extend([
+        String::new(),
+        "phase 3 loop".to_string(),
+        "------------".to_string(),
+        format!("frozen: {}", loop_status.state.frozen),
+        format!(
+            "freeze reason: {}",
+            loop_status.state.freeze_reason.as_deref().unwrap_or("none")
+        ),
+        format!(
+            "budget modifications: {}/{}",
+            loop_status.state.modifications_applied,
+            loop_status.policy.budgets.max_modifications_per_window
+        ),
+        format!(
+            "chained modifications: {}/{}",
+            loop_status.state.chained_modifications,
+            loop_status.policy.budgets.max_chained_modifications
+        ),
+        format!("loop decisions: {}", loop_status.state.decisions.len()),
+    ]);
+    if let Some(decision) = loop_status.state.decisions.last() {
+        lines.push(format!(
+            "latest loop decision: {:?} {}",
+            decision.kind, decision.reason
+        ));
+    } else {
+        lines.push("latest loop decision: none".to_string());
+    }
     lines.extend([
         String::new(),
         "next".to_string(),
         "----".to_string(),
-        "1. greco propose --since all --json".to_string(),
-        "2. greco modification validate <id> --json".to_string(),
-        "3. greco modification apply <id> --json".to_string(),
+        "1. greco loop run --since all --dry-run --json".to_string(),
+        "2. greco loop run --since all --apply --json".to_string(),
+        "3. greco loop status --json".to_string(),
         "4. greco audit --since all".to_string(),
     ]);
 

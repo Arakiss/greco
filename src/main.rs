@@ -4,6 +4,7 @@ mod catalog;
 mod cli;
 mod config;
 mod eval;
+mod loop_control;
 mod modification;
 mod proposal;
 mod provider;
@@ -16,8 +17,8 @@ use std::process::ExitCode;
 
 use catalog::{CandidateDraft, SkillLineage, SkillState};
 use cli::{
-    CatalogCommand, CatalogListState, Command, EvalCommand, ModificationCommand,
-    ModificationListState, ToolCommand, parse_args,
+    CatalogCommand, CatalogListState, Command, EvalCommand, LoopCommand, LoopRunMode,
+    ModificationCommand, ModificationListState, ToolCommand, parse_args,
 };
 use config::Config;
 use provider::OpenAiProvider;
@@ -146,6 +147,7 @@ async fn run() -> Result<ExitCode, String> {
         Command::Eval(command) => handle_eval(command, &config).await,
         Command::Propose(command) => handle_propose(command, &config),
         Command::Modification(command) => handle_modification(command, &config).await,
+        Command::Loop(command) => handle_loop(command, &config).await,
         Command::Audit(command) => handle_audit(command, &config),
         Command::TuiSnapshot => {
             println!("{}", tui::render_snapshot(&config)?);
@@ -167,6 +169,62 @@ fn handle_propose(command: cli::ProposeCommand, config: &Config) -> Result<ExitC
         );
     }
     Ok(ExitCode::SUCCESS)
+}
+
+async fn handle_loop(command: LoopCommand, config: &Config) -> Result<ExitCode, String> {
+    match command {
+        LoopCommand::Run { since, mode, json } => {
+            let report = loop_control::run(
+                &config.home,
+                &config.workspace,
+                loop_control::LoopRunOptions {
+                    since,
+                    mode: match mode {
+                        LoopRunMode::DryRun => loop_control::LoopMode::DryRun,
+                        LoopRunMode::Apply => loop_control::LoopMode::Apply,
+                    },
+                },
+            )
+            .await?;
+            if json {
+                print_pretty(&report)?;
+            } else {
+                println!("{}", loop_control::render_run_report(&report));
+            }
+            Ok(if report.success {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(2)
+            })
+        }
+        LoopCommand::Status { json } => {
+            let report = loop_control::status(&config.home)?;
+            if json {
+                print_pretty(&report)?;
+            } else {
+                println!("{}", loop_control::render_status(&report));
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        LoopCommand::Freeze { reason, json } => {
+            let report = loop_control::freeze(&config.home, reason)?;
+            if json {
+                print_pretty(&report)?;
+            } else {
+                println!("{}", loop_control::render_status(&report));
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        LoopCommand::Unfreeze { json } => {
+            let report = loop_control::unfreeze(&config.home)?;
+            if json {
+                print_pretty(&report)?;
+            } else {
+                println!("{}", loop_control::render_status(&report));
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+    }
 }
 
 async fn handle_modification(

@@ -27,6 +27,10 @@ Usage:
   greco modification validate <id> [--json]
   greco modification apply <id> [--json]
   greco modification revert <id> [--json]
+  greco loop run --since <all|24h|7d|30m> [--dry-run|--apply] [--json]
+  greco loop status [--json]
+  greco loop freeze --reason <text> [--json]
+  greco loop unfreeze [--json]
   greco audit --since <all|24h|7d|30m> [--json]
   greco tui --snapshot
 
@@ -67,6 +71,7 @@ pub enum Command {
     Eval(EvalCommand),
     Propose(ProposeCommand),
     Modification(ModificationCommand),
+    Loop(LoopCommand),
     Audit(AuditCommand),
     TuiSnapshot,
 }
@@ -191,6 +196,31 @@ pub enum ModificationListState {
     All,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LoopCommand {
+    Run {
+        since: String,
+        mode: LoopRunMode,
+        json: bool,
+    },
+    Status {
+        json: bool,
+    },
+    Freeze {
+        reason: String,
+        json: bool,
+    },
+    Unfreeze {
+        json: bool,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopRunMode {
+    DryRun,
+    Apply,
+}
+
 pub fn parse_args(args: Vec<String>) -> Result<Command, String> {
     if args.is_empty() {
         return Ok(Command::Help);
@@ -210,6 +240,7 @@ pub fn parse_args(args: Vec<String>) -> Result<Command, String> {
         "eval" => parse_eval(&args[1..]),
         "propose" => parse_propose(&args[1..]),
         "modification" => parse_modification(&args[1..]),
+        "loop" => parse_loop(&args[1..]),
         "audit" => parse_audit(&args[1..]),
         "tui" => {
             if args.iter().any(|arg| arg == "--snapshot") {
@@ -297,6 +328,77 @@ fn parse_modification_list(args: &[String]) -> Result<Command, String> {
     Ok(Command::Modification(ModificationCommand::List {
         state,
         json: args.iter().any(|arg| arg == "--json"),
+    }))
+}
+
+fn parse_loop(args: &[String]) -> Result<Command, String> {
+    match args.first().map(String::as_str) {
+        Some("run") => parse_loop_run(&args[1..]),
+        Some("status") => Ok(Command::Loop(LoopCommand::Status {
+            json: args.iter().any(|arg| arg == "--json"),
+        })),
+        Some("freeze") => parse_loop_freeze(&args[1..]),
+        Some("unfreeze") => Ok(Command::Loop(LoopCommand::Unfreeze {
+            json: args.iter().any(|arg| arg == "--json"),
+        })),
+        Some(other) => Err(format!("unknown loop command `{other}`")),
+        None => Err("expected `greco loop <run|status|freeze|unfreeze>`".to_string()),
+    }
+}
+
+fn parse_loop_run(args: &[String]) -> Result<Command, String> {
+    let mut since = "all".to_string();
+    let mut mode = LoopRunMode::DryRun;
+    let mut saw_dry_run = false;
+    let mut saw_apply = false;
+    let mut json = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--since" => {
+                index += 1;
+                since = args
+                    .get(index)
+                    .cloned()
+                    .ok_or_else(|| "--since requires all, or a duration like 24h".to_string())?;
+            }
+            "--dry-run" => {
+                mode = LoopRunMode::DryRun;
+                saw_dry_run = true;
+            }
+            "--apply" => {
+                mode = LoopRunMode::Apply;
+                saw_apply = true;
+            }
+            "--json" => json = true,
+            other => return Err(format!("unknown loop run option `{other}`")),
+        }
+        index += 1;
+    }
+    if saw_dry_run && saw_apply {
+        return Err("choose only one of --dry-run or --apply".to_string());
+    }
+    Ok(Command::Loop(LoopCommand::Run { since, mode, json }))
+}
+
+fn parse_loop_freeze(args: &[String]) -> Result<Command, String> {
+    let mut reason = None;
+    let mut json = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--reason" => {
+                index += 1;
+                reason = args.get(index).cloned();
+            }
+            "--json" => json = true,
+            other => return Err(format!("unknown loop freeze option `{other}`")),
+        }
+        index += 1;
+    }
+    Ok(Command::Loop(LoopCommand::Freeze {
+        reason: reason.unwrap_or_else(|| "operator freeze".to_string()),
+        json,
     }))
 }
 
@@ -726,6 +828,43 @@ mod tests {
             parse_args(vec!["propose".into(), "--since".into(), "all".into()]).unwrap(),
             Command::Propose(ProposeCommand {
                 since: "all".to_string(),
+                json: false,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_loop_run_apply() {
+        assert_eq!(
+            parse_args(vec![
+                "loop".into(),
+                "run".into(),
+                "--since".into(),
+                "all".into(),
+                "--apply".into(),
+                "--json".into(),
+            ])
+            .unwrap(),
+            Command::Loop(LoopCommand::Run {
+                since: "all".to_string(),
+                mode: LoopRunMode::Apply,
+                json: true,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_loop_freeze() {
+        assert_eq!(
+            parse_args(vec![
+                "loop".into(),
+                "freeze".into(),
+                "--reason".into(),
+                "audit".into(),
+            ])
+            .unwrap(),
+            Command::Loop(LoopCommand::Freeze {
+                reason: "audit".to_string(),
                 json: false,
             })
         );

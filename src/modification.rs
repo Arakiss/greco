@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -303,6 +304,36 @@ pub fn apply(home: &Path, id: &str) -> Result<LifecycleResult, String> {
     })
 }
 
+pub fn reject(home: &Path, id: &str, reason: String) -> Result<LifecycleResult, String> {
+    let (path, mut manifest) = read_by_id(home, id)?;
+    if manifest.state != ModificationState::Proposed
+        && manifest.state != ModificationState::Validated
+    {
+        return Err(format!(
+            "modification `{id}` must be proposed or validated before reject, found {:?}",
+            manifest.state
+        ));
+    }
+    let from = manifest.state.clone();
+    manifest.state = ModificationState::Rejected;
+    manifest.validation = Some(ModificationValidation {
+        validated_at_unix_ms: now_millis(),
+        accepted: false,
+        eval_runs: Vec::new(),
+        summary: reason,
+    });
+    let to = manifest.state.clone();
+    let new_path = move_with_manifest(home, path, manifest)?;
+    let manifest = read_manifest(&new_path)?;
+    Ok(LifecycleResult {
+        id: id.to_string(),
+        from,
+        to,
+        path: new_path,
+        manifest,
+    })
+}
+
 pub fn revert(home: &Path, id: &str) -> Result<LifecycleResult, String> {
     let (path, mut manifest) = read_by_id(home, id)?;
     if manifest.state != ModificationState::Active {
@@ -334,6 +365,7 @@ pub fn revert(home: &Path, id: &str) -> Result<LifecycleResult, String> {
 pub fn active_layer_a_prompt(home: &Path) -> Result<String, String> {
     let active = list_entries(home, ModificationState::Active)?;
     let mut blocks = Vec::new();
+    let mut seen = BTreeSet::new();
     for entry in active {
         let (_, manifest) = read_by_id(home, &entry.id)?;
         if manifest.layer != ModificationLayer::A {
@@ -350,10 +382,22 @@ pub fn active_layer_a_prompt(home: &Path) -> Result<String, String> {
                 body = body.chars().take(prompt_budget_chars).collect::<String>();
                 body.push_str("\n[greco: active procedure truncated]");
             }
-            blocks.push(format!("Active procedure: {title}\n{body}"));
+            if seen.insert((title.clone(), body.clone())) {
+                blocks.push(format!("Active procedure: {title}\n{body}"));
+            }
         }
     }
     Ok(blocks.join("\n\n"))
+}
+
+pub fn has_equivalent_active(home: &Path, manifest: &ModificationManifest) -> Result<bool, String> {
+    for entry in list_entries(home, ModificationState::Active)? {
+        let (_, active) = read_by_id(home, &entry.id)?;
+        if active.layer == manifest.layer && active.payload == manifest.payload {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 pub fn render_entries(entries: &[ModificationEntry]) -> String {
@@ -540,6 +584,7 @@ mod tests {
             },
             eval_runs: Vec::new(),
             modifications: Default::default(),
+            loop_state: None,
             signal_assessment: "baseline window has enough samples".to_string(),
             report_paths: None,
         };
