@@ -1,7 +1,9 @@
 mod agent;
+mod audit;
 mod catalog;
 mod cli;
 mod config;
+mod eval;
 mod proposal;
 mod provider;
 mod tools;
@@ -12,7 +14,7 @@ mod validation;
 use std::process::ExitCode;
 
 use catalog::{CandidateDraft, SkillLineage, SkillState};
-use cli::{CatalogCommand, CatalogListState, Command, ToolCommand, parse_args};
+use cli::{CatalogCommand, CatalogListState, Command, EvalCommand, ToolCommand, parse_args};
 use config::Config;
 use provider::OpenAiProvider;
 use serde_json::json;
@@ -137,11 +139,71 @@ async fn run() -> Result<ExitCode, String> {
                 ExitCode::from(2)
             })
         }
+        Command::Eval(command) => handle_eval(command, &config).await,
+        Command::Audit(command) => handle_audit(command, &config),
         Command::TuiSnapshot => {
             println!("{}", tui::render_snapshot(&config)?);
             Ok(ExitCode::SUCCESS)
         }
     }
+}
+
+async fn handle_eval(command: EvalCommand, config: &Config) -> Result<ExitCode, String> {
+    match command {
+        EvalCommand::List { json } => {
+            let tasks = eval::list_tasks(&config.home)?;
+            if json {
+                let summaries = tasks.iter().map(eval::task_summary).collect::<Vec<_>>();
+                print_pretty(&summaries)?;
+            } else {
+                println!("{}", eval::render_task_list(&tasks));
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        EvalCommand::Run { task_id, json } => {
+            if task_id == "all" {
+                let tasks = eval::list_tasks(&config.home)?;
+                let mut reports = Vec::new();
+                for task in tasks {
+                    reports.push(eval::run_task(&config.home, &config.workspace, &task.id).await?);
+                }
+                if json {
+                    print_pretty(&reports)?;
+                } else {
+                    for report in &reports {
+                        println!("{}", eval::render_run_report(report));
+                    }
+                }
+                Ok(if reports.iter().all(|report| report.success) {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::from(2)
+                })
+            } else {
+                let report = eval::run_task(&config.home, &config.workspace, &task_id).await?;
+                if json {
+                    print_pretty(&report)?;
+                } else {
+                    println!("{}", eval::render_run_report(&report));
+                }
+                Ok(if report.success {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::from(2)
+                })
+            }
+        }
+    }
+}
+
+fn handle_audit(command: cli::AuditCommand, config: &Config) -> Result<ExitCode, String> {
+    let report = audit::write_report(&config.home, &command.since)?;
+    if command.json {
+        print_pretty(&report)?;
+    } else {
+        println!("{}", audit::render_markdown(&report));
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 async fn handle_propose_skill(

@@ -62,9 +62,9 @@ The bet:
 | F | Primitive implementations | Very high | Out of scope v0 |
 | G | Agent loop / harness code | DGM scale | Out of scope v0 |
 
-## Current Surface (transition state)
+## Current Surface
 
-The alpha skill commands remain operational during the transition. The recalibrated commands arrive in Phase 1 (`0.4.0-alpha.1`).
+The alpha skill commands remain operational during the transition. Phase 1 (`0.4.0-alpha.1`) adds the first recalibrated instrumentation and baseline commands.
 
 Alpha skill commands (historical):
 
@@ -89,7 +89,13 @@ Recalibrated commands (Phase 1+):
 
 ```sh
 greco eval list
-greco eval run <task-id>
+greco eval run <task-id|all>
+greco audit --since <window>
+```
+
+Planned commands:
+
+```sh
 greco eval probe <off-suite-task>
 greco propose [--since <window>]
 greco modification list --state <state>
@@ -99,7 +105,6 @@ greco modification apply <id>
 greco modification revert <id>
 greco harness checkpoint list
 greco harness checkpoint restore <id>
-greco audit --since <window>
 ```
 
 `greco ask` continues to use OpenAI and requires `OPENAI_API_KEY`. Each run prints the local trace path on stderr. Local tool commands and validation do not require network access.

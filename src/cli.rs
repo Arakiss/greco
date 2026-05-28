@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 pub const HELP: &str = "\
-greco - a Rust coding-agent harness that evolves its local skill catalog
+greco - a Rust coding-agent harness that observes and improves its local harness
 
 Usage:
   greco --help
@@ -19,6 +19,9 @@ Usage:
   greco catalog promote <candidate-id> [--json]
   greco catalog reject <candidate-id> --reason <text> [--json]
   greco validate-skill <path> [--json]
+  greco eval list [--json]
+  greco eval run <task-id|all> [--json]
+  greco audit --since <all|24h|7d|30m> [--json]
   greco tui --snapshot
 
 Environment:
@@ -55,6 +58,8 @@ pub enum Command {
         path: PathBuf,
         json: bool,
     },
+    Eval(EvalCommand),
+    Audit(AuditCommand),
     TuiSnapshot,
 }
 
@@ -125,6 +130,18 @@ pub enum ToolCommand {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EvalCommand {
+    List { json: bool },
+    Run { task_id: String, json: bool },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuditCommand {
+    pub since: String,
+    pub json: bool,
+}
+
 pub fn parse_args(args: Vec<String>) -> Result<Command, String> {
     if args.is_empty() {
         return Ok(Command::Help);
@@ -141,6 +158,8 @@ pub fn parse_args(args: Vec<String>) -> Result<Command, String> {
         "propose-skill" => parse_propose_skill(&args[1..]),
         "catalog" => parse_catalog(&args[1..]),
         "validate-skill" => parse_validate_skill(&args[1..]),
+        "eval" => parse_eval(&args[1..]),
+        "audit" => parse_audit(&args[1..]),
         "tui" => {
             if args.iter().any(|arg| arg == "--snapshot") {
                 Ok(Command::TuiSnapshot)
@@ -153,6 +172,41 @@ pub fn parse_args(args: Vec<String>) -> Result<Command, String> {
         }
         other => Err(format!("unknown command `{other}`; run `greco --help`")),
     }
+}
+
+fn parse_eval(args: &[String]) -> Result<Command, String> {
+    match args.first().map(String::as_str) {
+        Some("list") => Ok(Command::Eval(EvalCommand::List {
+            json: args.iter().any(|arg| arg == "--json"),
+        })),
+        Some("run") => Ok(Command::Eval(EvalCommand::Run {
+            task_id: required_arg(args, 1, "task id")?,
+            json: args.iter().any(|arg| arg == "--json"),
+        })),
+        Some(other) => Err(format!("unknown eval command `{other}`")),
+        None => Err("expected `greco eval <list|run>`".to_string()),
+    }
+}
+
+fn parse_audit(args: &[String]) -> Result<Command, String> {
+    let mut since = "all".to_string();
+    let mut json = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--since" => {
+                index += 1;
+                since = args
+                    .get(index)
+                    .cloned()
+                    .ok_or_else(|| "--since requires all, or a duration like 24h".to_string())?;
+            }
+            "--json" => json = true,
+            other => return Err(format!("unknown audit option `{other}`")),
+        }
+        index += 1;
+    }
+    Ok(Command::Audit(AuditCommand { since, json }))
 }
 
 fn parse_ask(args: &[String]) -> Result<Command, String> {
@@ -490,6 +544,34 @@ mod tests {
                 validation_command: "sh run.sh".to_string(),
                 timeout_seconds: 5,
                 overwrite: false,
+                json: false,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_eval_run() {
+        assert_eq!(
+            parse_args(vec![
+                "eval".into(),
+                "run".into(),
+                "refactor".into(),
+                "--json".into()
+            ])
+            .unwrap(),
+            Command::Eval(EvalCommand::Run {
+                task_id: "refactor".to_string(),
+                json: true,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_audit_since() {
+        assert_eq!(
+            parse_args(vec!["audit".into(), "--since".into(), "24h".into()]).unwrap(),
+            Command::Audit(AuditCommand {
+                since: "24h".to_string(),
                 json: false,
             })
         );

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 
 use serde_json::{Value, json};
 
@@ -49,6 +49,7 @@ pub async fn run_agent<P: ModelProvider>(
 
     let mut input_items = vec![user_message(input)];
     let mut tool_call_count = 0;
+    let mut friction = FrictionState::default();
 
     for turn in 1..=options.max_turns {
         let response = provider
@@ -62,6 +63,8 @@ pub async fn run_agent<P: ModelProvider>(
                 text_format: None,
             })
             .await?;
+
+        friction.tokens += response_tokens(&response.raw);
 
         trace
             .record(
@@ -79,6 +82,22 @@ pub async fn run_agent<P: ModelProvider>(
 
         input_items.extend(response.output_items.clone());
         if response.tool_calls.is_empty() {
+            if looks_like_avoidable_prompt(&response.output_text) {
+                friction.avoidable_prompts += 1;
+                trace
+                    .record(
+                        "friction_event",
+                        json!({
+                            "turn": turn,
+                            "kind": "avoidable_prompt",
+                            "evidence": response.output_text
+                        }),
+                    )
+                    .await?;
+            }
+            let objective_success = friction.avoidable_prompts == 0;
+            record_friction_summary(&trace, turn, tool_call_count, objective_success, &friction)
+                .await?;
             trace
                 .record(
                     "session_end",
@@ -99,6 +118,21 @@ pub async fn run_agent<P: ModelProvider>(
 
         for call in response.tool_calls {
             tool_call_count += 1;
+            let call_signature = format!("{}:{}", call.name, call.arguments);
+            if !friction.seen_tool_calls.insert(call_signature.clone()) {
+                friction.retracements += 1;
+                trace
+                    .record(
+                        "friction_event",
+                        json!({
+                            "turn": turn,
+                            "kind": "retracement",
+                            "tool": call.name,
+                            "signature": call_signature
+                        }),
+                    )
+                    .await?;
+            }
             trace
                 .record(
                     "tool_call",
@@ -113,6 +147,37 @@ pub async fn run_agent<P: ModelProvider>(
             let result = tools::execute_tool_call(&config.workspace, &call).await;
             let serialized = serialize_tool_result(&result)?;
             input_items.push(function_call_output(&call.call_id, serialized.clone()));
+            if !result.success {
+                let error_signature = format!("{}:{}", call.name, result.output);
+                if !friction.seen_errors.insert(error_signature.clone()) {
+                    friction.repeated_errors += 1;
+                    trace
+                        .record(
+                            "friction_event",
+                            json!({
+                                "turn": turn,
+                                "kind": "repeated_error",
+                                "tool": call.name,
+                                "signature": error_signature
+                            }),
+                        )
+                        .await?;
+                }
+                if is_missing_tool_failure(&result.output) {
+                    friction.missing_tool_failures += 1;
+                    trace
+                        .record(
+                            "friction_event",
+                            json!({
+                                "turn": turn,
+                                "kind": "missing_tool_failure",
+                                "tool": call.name,
+                                "output": result.output
+                            }),
+                        )
+                        .await?;
+                }
+            }
             trace
                 .record(
                     "tool_result",
@@ -128,6 +193,7 @@ pub async fn run_agent<P: ModelProvider>(
         }
     }
 
+    record_friction_summary(&trace, options.max_turns, tool_call_count, false, &friction).await?;
     trace
         .record(
             "session_end",
@@ -143,6 +209,78 @@ pub async fn run_agent<P: ModelProvider>(
         options.max_turns,
         trace.path().display()
     ))
+}
+
+#[derive(Debug, Default)]
+struct FrictionState {
+    tokens: u64,
+    repeated_errors: u64,
+    retracements: u64,
+    avoidable_prompts: u64,
+    missing_tool_failures: u64,
+    seen_tool_calls: BTreeSet<String>,
+    seen_errors: BTreeSet<String>,
+}
+
+async fn record_friction_summary(
+    trace: &Trajectory,
+    turns: usize,
+    tool_calls: usize,
+    objective_success: bool,
+    friction: &FrictionState,
+) -> Result<(), String> {
+    trace
+        .record(
+            "friction_summary",
+            json!({
+                "turns": turns,
+                "tool_calls": tool_calls,
+                "tokens": friction.tokens,
+                "repeated_errors": friction.repeated_errors,
+                "retracements": friction.retracements,
+                "avoidable_prompts": friction.avoidable_prompts,
+                "missing_tool_failures": friction.missing_tool_failures,
+                "objective_success": objective_success
+            }),
+        )
+        .await
+}
+
+fn response_tokens(raw: &Value) -> u64 {
+    raw.get("usage")
+        .and_then(|usage| usage.get("total_tokens"))
+        .and_then(Value::as_u64)
+        .or_else(|| {
+            let usage = raw.get("usage")?;
+            let input = usage
+                .get("input_tokens")
+                .and_then(Value::as_u64)
+                .unwrap_or_default();
+            let output = usage
+                .get("output_tokens")
+                .and_then(Value::as_u64)
+                .unwrap_or_default();
+            Some(input + output)
+        })
+        .unwrap_or_default()
+}
+
+fn is_missing_tool_failure(output: &str) -> bool {
+    let lower = output.to_ascii_lowercase();
+    lower.contains("unknown tool")
+        || lower.contains("missing tool")
+        || lower.contains("tool not found")
+        || lower.contains("not implemented")
+}
+
+fn looks_like_avoidable_prompt(output: &str) -> bool {
+    let lower = output.to_ascii_lowercase();
+    output.trim_end().ends_with('?')
+        && (lower.contains("should i")
+            || lower.contains("do you want")
+            || lower.contains("please provide")
+            || lower.contains("can you clarify")
+            || lower.contains("could you clarify"))
 }
 
 fn serialize_tool_result(result: &ToolResult) -> Result<String, String> {
@@ -274,7 +412,17 @@ mod tests {
         assert_eq!(outcome.turns, 2);
         assert_eq!(outcome.tool_calls, 1);
         assert!(outcome.trace_path.exists());
+        let trace = fs::read_to_string(&outcome.trace_path).unwrap();
+        assert!(trace.contains("\"event\":\"friction_summary\""));
         fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn detects_avoidable_prompt_shape() {
+        assert!(looks_like_avoidable_prompt(
+            "Can you clarify which file I should edit?"
+        ));
+        assert!(!looks_like_avoidable_prompt("The answer is 42."));
     }
 
     fn temp_dir(label: &str) -> PathBuf {
