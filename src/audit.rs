@@ -154,15 +154,37 @@ pub fn render_markdown(report: &AuditReport) -> String {
                 "- Latest decision: {:?} {}",
                 decision.kind, decision.reason
             ));
+            if let Some(comparison) = &decision.comparison {
+                lines.push(format!(
+                    "- Latest comparison: {:?} primary_improvement_ppm={} max_regression_ppm={} artifact={}",
+                    comparison.outcome,
+                    comparison.primary_improvement_ppm,
+                    comparison.max_regression_ppm,
+                    comparison
+                        .artifact_path
+                        .as_ref()
+                        .map(|path| path.display().to_string())
+                        .unwrap_or_else(|| "none".to_string())
+                ));
+            }
         }
         if !loop_state.recent_decisions.is_empty() {
             lines.push(String::new());
             lines.push("Recent loop decisions:".to_string());
             for decision in &loop_state.recent_decisions {
-                lines.push(format!(
+                let mut rendered = format!(
                     "- {:?} {} ({})",
                     decision.kind, decision.id, decision.reason
-                ));
+                );
+                if let Some(comparison) = &decision.comparison {
+                    rendered.push_str(&format!(
+                        " comparison={:?} primary_improvement_ppm={} max_regression_ppm={}",
+                        comparison.outcome,
+                        comparison.primary_improvement_ppm,
+                        comparison.max_regression_ppm
+                    ));
+                }
+                lines.push(rendered);
             }
         }
     } else {

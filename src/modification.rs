@@ -390,14 +390,24 @@ pub fn active_layer_a_prompt(home: &Path) -> Result<String, String> {
     Ok(blocks.join("\n\n"))
 }
 
-pub fn has_equivalent_active(home: &Path, manifest: &ModificationManifest) -> Result<bool, String> {
-    for entry in list_entries(home, ModificationState::Active)? {
-        let (_, active) = read_by_id(home, &entry.id)?;
-        if active.layer == manifest.layer && active.payload == manifest.payload {
-            return Ok(true);
+pub fn find_equivalent_in_states(
+    home: &Path,
+    manifest: &ModificationManifest,
+    states: &[ModificationState],
+    excluded_id: Option<&str>,
+) -> Result<Option<ModificationEntry>, String> {
+    for state in states {
+        for entry in list_entries(home, state.clone())? {
+            if excluded_id.is_some_and(|id| id == entry.id) {
+                continue;
+            }
+            let (_, candidate) = read_by_id(home, &entry.id)?;
+            if candidate.layer == manifest.layer && candidate.payload == manifest.payload {
+                return Ok(Some(entry));
+            }
         }
     }
-    Ok(false)
+    Ok(None)
 }
 
 pub fn render_entries(entries: &[ModificationEntry]) -> String {

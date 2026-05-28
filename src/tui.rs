@@ -107,6 +107,17 @@ pub fn render_snapshot(config: &Config) -> Result<String, String> {
             "latest loop decision: {:?} {}",
             decision.kind, decision.reason
         ));
+        if let Some(comparison) = &decision.comparison {
+            lines.push(format!(
+                "latest comparison: {:?} primary_improvement_ppm={} max_regression_ppm={}",
+                comparison.outcome,
+                comparison.primary_improvement_ppm,
+                comparison.max_regression_ppm
+            ));
+            if let Some(path) = &comparison.artifact_path {
+                lines.push(format!("comparison artifact: {}", path.display()));
+            }
+        }
     } else {
         lines.push("latest loop decision: none".to_string());
     }
