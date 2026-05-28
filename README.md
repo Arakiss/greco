@@ -16,7 +16,7 @@
 
 > A Rust coding-agent harness that observes its own use and improves itself, within budgets and a suite the operator defines.
 
-**Development status: recalibrated alpha.** The original alpha cycle (`0.1.0-alpha.1` through `0.3.0-alpha.1`) explored a skill-catalog evolutionary axis. After the loop closed, a critical review concluded the axis was self-referential and did not test the deeper aspiration of the project. The axis was replaced at `0.4.0-alpha.1`; `0.5.0-alpha.1` adds the first manual, reversible modification lifecycle. The skill code is preserved as historical scaffolding.
+**Development status: recalibrated alpha.** The original alpha cycle (`0.1.0-alpha.1` through `0.3.0-alpha.1`) explored a skill-catalog evolutionary axis. After the loop closed, a critical review concluded the axis was self-referential and did not test the deeper aspiration of the project. The axis was replaced at `0.4.0-alpha.1`; `0.5.0-alpha.1` adds the first manual, reversible modification lifecycle; `0.6.0-alpha.1` adds the first bounded autonomous loop for Layer A/S1. The skill code is preserved as historical scaffolding.
 
 Greco's evolutionary unit is the *harness modification*: a typed, layered, reversible change to the control plane around a frozen model. Session traces reveal friction. The agent proposes modifications. Modifications are validated empirically against an operator-defined evaluation suite within strict budgets. Modifications that meet thresholds are applied autonomously. The operator does not approve per proposal; the operator designs the experiment and audits aggregate behavior on a cadence.
 
@@ -64,7 +64,7 @@ The bet:
 
 ## Current Surface
 
-The alpha skill commands remain operational as historical scaffolding. The recalibrated surface now has measurable eval/audit commands plus a manual modification lifecycle.
+The alpha skill commands remain operational as historical scaffolding. The recalibrated surface now has measurable eval/audit commands, a manual modification lifecycle, and a bounded autonomous loop.
 
 Alpha skill commands (historical):
 
@@ -97,6 +97,10 @@ greco modification show <id> [--diff]
 greco modification validate <id>
 greco modification apply <id>
 greco modification revert <id>
+greco loop run --since <window> [--dry-run|--apply]
+greco loop status
+greco loop freeze --reason <text>
+greco loop unfreeze
 ```
 
 Planned commands:
@@ -278,4 +282,4 @@ The roadmap declares explicit decision gates at the end of Phase 1, Phase 2, and
 
 ## Status Summary
 
-The alpha skill cycle is closed and documented. The recalibrated v0 begins at `0.4.0-alpha.1` with instrumentation and baseline (Phase 1). `0.5.0-alpha.1` is the first release-gated Phase 2 alpha because it adds new CLI commands and a persistent modification-manifest format. The tracked documentation set in `docs/` is the public product contract.
+The alpha skill cycle is closed and documented. The recalibrated v0 begins at `0.4.0-alpha.1` with instrumentation and baseline (Phase 1). `0.5.0-alpha.1` is the first release-gated Phase 2 alpha because it adds new CLI commands and a persistent modification-manifest format. `0.6.0-alpha.1` is the first release-gated Phase 3 alpha because it adds autonomous loop commands and persistent budget/freeze/checkpoint state. The tracked documentation set in `docs/` is the public product contract.

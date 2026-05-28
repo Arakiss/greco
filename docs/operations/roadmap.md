@@ -57,13 +57,14 @@ Decision gate: baseline friction signals stable enough for 5% delta detection.
 
 Decision gate: proposal precision and at least one applied modification moves the suite.
 
-### Later alpha — Autonomous loop on A and S1 (Phase 3, v0 acceptance gate)
+### 0.6.0-alpha.1 — Autonomous loop on A and S1 (Phase 3, v0 acceptance gate)
 
 - Budget enforcement.
 - Threshold logic.
 - Scheduler-driven proposal-validation-application loop.
 - Freeze caps and rollback.
 - Extended audit reports.
+- Operator commands: `greco loop run`, `greco loop status`, `greco loop freeze`, `greco loop unfreeze`.
 
 Decision gate: one audit window of autonomous operation shows measurable aggregate friction reduction. This is the v0 acceptance gate. If it fails, the project closes per RFC Appendix B.
 
