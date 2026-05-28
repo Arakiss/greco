@@ -7,7 +7,10 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::eval::EvalRunReport;
+use crate::{
+    eval::EvalRunReport,
+    modification::{self, ModificationEntry},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditReport {
@@ -17,6 +20,7 @@ pub struct AuditReport {
     pub eval_run_count: usize,
     pub metrics: AuditMetrics,
     pub eval_runs: Vec<AuditEvalRun>,
+    pub modifications: AuditModifications,
     pub signal_assessment: String,
     pub report_paths: Option<AuditReportPaths>,
 }
@@ -50,10 +54,18 @@ pub struct AuditReportPaths {
     pub json: PathBuf,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AuditModifications {
+    pub proposed: Vec<ModificationEntry>,
+    pub validated: Vec<ModificationEntry>,
+    pub active: Vec<ModificationEntry>,
+    pub rejected: Vec<ModificationEntry>,
+    pub retired: Vec<ModificationEntry>,
+}
+
 pub fn write_report(home: &Path, since: &str) -> Result<AuditReport, String> {
     let generated_at_unix_ms = now_millis();
-    let since_ms = since_cutoff_ms(since, generated_at_unix_ms)?;
-    let mut report = build_report(home, since, since_ms, generated_at_unix_ms)?;
+    let mut report = build_window_report_at(home, since, generated_at_unix_ms)?;
     let directory = home.join("audit");
     fs::create_dir_all(&directory)
         .map_err(|err| format!("cannot create audit directory: {err}"))?;
@@ -69,6 +81,10 @@ pub fn write_report(home: &Path, since: &str) -> Result<AuditReport, String> {
     let serialized = serde_json::to_string_pretty(&report).map_err(|err| err.to_string())?;
     fs::write(&json, serialized).map_err(|err| format!("cannot write audit json: {err}"))?;
     Ok(report)
+}
+
+pub fn build_window_report(home: &Path, since: &str) -> Result<AuditReport, String> {
+    build_window_report_at(home, since, now_millis())
 }
 
 pub fn render_markdown(report: &AuditReport) -> String {
@@ -101,6 +117,14 @@ pub fn render_markdown(report: &AuditReport) -> String {
             report.metrics.objective_failures
         ),
         String::new(),
+        "## Modification Lifecycle".to_string(),
+        String::new(),
+        format!("- Proposed: {}", report.modifications.proposed.len()),
+        format!("- Validated: {}", report.modifications.validated.len()),
+        format!("- Active: {}", report.modifications.active.len()),
+        format!("- Rejected: {}", report.modifications.rejected.len()),
+        format!("- Retired: {}", report.modifications.retired.len()),
+        String::new(),
         "## Eval Baseline".to_string(),
         String::new(),
     ];
@@ -127,12 +151,12 @@ pub fn render_markdown(report: &AuditReport) -> String {
     lines.join("\n")
 }
 
-fn build_report(
+fn build_window_report_at(
     home: &Path,
     since: &str,
-    since_ms: Option<u128>,
     generated_at_unix_ms: u128,
 ) -> Result<AuditReport, String> {
+    let since_ms = since_cutoff_ms(since, generated_at_unix_ms)?;
     let mut metrics = AuditMetrics::default();
     let mut session_count = 0;
     for summary in read_session_summaries(home, since_ms)? {
@@ -152,6 +176,14 @@ fn build_report(
     }
 
     let eval_runs = read_eval_runs(home, since_ms)?;
+    let modification_snapshot = modification::snapshot(home)?;
+    let modifications = AuditModifications {
+        proposed: modification_snapshot.proposed,
+        validated: modification_snapshot.validated,
+        active: modification_snapshot.active,
+        rejected: modification_snapshot.rejected,
+        retired: modification_snapshot.retired,
+    };
     let signal_assessment = assess_signal(session_count, eval_runs.len());
     Ok(AuditReport {
         generated_at_unix_ms,
@@ -160,6 +192,7 @@ fn build_report(
         eval_run_count: eval_runs.len(),
         metrics,
         eval_runs,
+        modifications,
         signal_assessment,
         report_paths: None,
     })
@@ -393,15 +426,16 @@ mod tests {
         fs::create_dir_all(&sessions).unwrap();
         fs::write(
             sessions.join("demo.jsonl"),
-            r#"{"ts_unix_ms":1000,"event":"friction_summary","data":{"turns":2,"tool_calls":1,"tokens":42,"repeated_errors":1,"retracements":0,"avoidable_prompts":0,"missing_tool_failures":0,"objective_success":true}}"#,
+            r#"{"ts_unix_ms":1000,"event":"friction_summary","data":{"turns":2,"tool_calls":1,"tokens":42,"repeated_errors":1,"retracements":0,"avoidable_prompts":0,"missing_tool_failures":1,"objective_success":true}}"#,
         )
         .unwrap();
 
-        let report = build_report(&home, "all", None, 2_000).unwrap();
+        let report = build_window_report_at(&home, "all", 2_000).unwrap();
 
         assert_eq!(report.session_count, 1);
         assert_eq!(report.metrics.turns, 2);
         assert_eq!(report.metrics.tokens, 42);
+        assert_eq!(report.metrics.missing_tool_failures, 1);
         assert_eq!(report.metrics.objective_successes, 1);
         fs::remove_dir_all(home).unwrap();
     }

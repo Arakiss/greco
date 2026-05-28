@@ -1,4 +1,6 @@
-use crate::{catalog::Catalog, config::Config};
+use std::fs;
+
+use crate::{catalog::Catalog, config::Config, eval, modification};
 
 pub fn render_status(config: &Config) -> String {
     [
@@ -49,14 +51,57 @@ pub fn render_snapshot(config: &Config) -> Result<String, String> {
         }
     }
 
+    lines.extend([String::new(), "phase 2".to_string(), "-------".to_string()]);
+    let tasks = eval::list_tasks(&config.home)?;
+    let modifications = modification::snapshot(&config.home)?;
+    lines.push(format!("eval tasks: {}", tasks.len()));
+    lines.push(format!(
+        "proposed modifications: {}",
+        modifications.proposed.len()
+    ));
+    lines.push(format!(
+        "validated modifications: {}",
+        modifications.validated.len()
+    ));
+    lines.push(format!(
+        "active modifications: {}",
+        modifications.active.len()
+    ));
+    lines.push(format!(
+        "rejected modifications: {}",
+        modifications.rejected.len()
+    ));
+    lines.push(format!("latest audit: {}", latest_audit(&config.home)));
+    if modifications.active.is_empty() {
+        lines.push("runtime Layer A procedures: 0".to_string());
+    } else {
+        lines.push("runtime Layer A procedures: active".to_string());
+        for entry in modifications.active {
+            lines.push(format!("- {} :: {}", entry.id, entry.description));
+        }
+    }
     lines.extend([
         String::new(),
         "next".to_string(),
         "----".to_string(),
-        "1. greco validate-skill <path> --json".to_string(),
-        "2. greco ask --input \"...\"".to_string(),
-        "3. inspect .greco/traces/validation".to_string(),
+        "1. greco propose --since all --json".to_string(),
+        "2. greco modification validate <id> --json".to_string(),
+        "3. greco modification apply <id> --json".to_string(),
+        "4. greco audit --since all".to_string(),
     ]);
 
     Ok(lines.join("\n"))
+}
+
+fn latest_audit(home: &std::path::Path) -> String {
+    let dir = home.join("audit");
+    let Ok(entries) = fs::read_dir(dir) else {
+        return "missing".to_string();
+    };
+    entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .max()
+        .unwrap_or_else(|| "missing".to_string())
 }

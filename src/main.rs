@@ -4,6 +4,7 @@ mod catalog;
 mod cli;
 mod config;
 mod eval;
+mod modification;
 mod proposal;
 mod provider;
 mod tools;
@@ -14,7 +15,10 @@ mod validation;
 use std::process::ExitCode;
 
 use catalog::{CandidateDraft, SkillLineage, SkillState};
-use cli::{CatalogCommand, CatalogListState, Command, EvalCommand, ToolCommand, parse_args};
+use cli::{
+    CatalogCommand, CatalogListState, Command, EvalCommand, ModificationCommand,
+    ModificationListState, ToolCommand, parse_args,
+};
 use config::Config;
 use provider::OpenAiProvider;
 use serde_json::json;
@@ -140,9 +144,104 @@ async fn run() -> Result<ExitCode, String> {
             })
         }
         Command::Eval(command) => handle_eval(command, &config).await,
+        Command::Propose(command) => handle_propose(command, &config),
+        Command::Modification(command) => handle_modification(command, &config).await,
         Command::Audit(command) => handle_audit(command, &config),
         Command::TuiSnapshot => {
             println!("{}", tui::render_snapshot(&config)?);
+            Ok(ExitCode::SUCCESS)
+        }
+    }
+}
+
+fn handle_propose(command: cli::ProposeCommand, config: &Config) -> Result<ExitCode, String> {
+    let report = audit::build_window_report(&config.home, &command.since)?;
+    let proposed = modification::propose_from_audit(&config.home, &report)?;
+    if command.json {
+        print_pretty(&proposed)?;
+    } else {
+        println!("proposed {} at {}", proposed.id, proposed.path.display());
+        println!(
+            "source: {}",
+            proposed.manifest.friction_source.dominant_signal
+        );
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+async fn handle_modification(
+    command: ModificationCommand,
+    config: &Config,
+) -> Result<ExitCode, String> {
+    match command {
+        ModificationCommand::List { state, json } => {
+            let snapshot = modification::snapshot(&config.home)?;
+            if json {
+                match state {
+                    ModificationListState::Proposed => print_pretty(&snapshot.proposed)?,
+                    ModificationListState::Validated => print_pretty(&snapshot.validated)?,
+                    ModificationListState::Active => print_pretty(&snapshot.active)?,
+                    ModificationListState::Rejected => print_pretty(&snapshot.rejected)?,
+                    ModificationListState::Retired => print_pretty(&snapshot.retired)?,
+                    ModificationListState::All => print_pretty(&snapshot)?,
+                }
+            } else {
+                print_modification_text(state, snapshot);
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        ModificationCommand::Show { id, json, diff } => {
+            let (_path, manifest) = modification::read_by_id(&config.home, &id)?;
+            if json {
+                print_pretty(&manifest)?;
+            } else if diff {
+                println!("{}", modification::render_diff(&manifest));
+            } else {
+                println!(
+                    "{:?} {:?} {} {} - {}",
+                    manifest.state,
+                    manifest.layer,
+                    manifest.id,
+                    manifest.version,
+                    manifest.description
+                );
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        ModificationCommand::Validate { id, json } => {
+            let result = modification::validate(&config.home, &config.workspace, &id).await?;
+            if json {
+                print_pretty(&result)?;
+            } else {
+                println!(
+                    "{} {:?}->{:?} at {}",
+                    result.id,
+                    result.from,
+                    result.to,
+                    result.path.display()
+                );
+            }
+            Ok(
+                if result
+                    .manifest
+                    .validation
+                    .as_ref()
+                    .is_some_and(|v| v.accepted)
+                {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::from(2)
+                },
+            )
+        }
+        ModificationCommand::Apply { id, json } => {
+            let result = modification::apply(&config.home, &id)?;
+            print_lifecycle_result(json, &result)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        ModificationCommand::Revert { id, json } => {
+            let result = modification::revert(&config.home, &id)?;
+            print_lifecycle_result(json, &result)?;
             Ok(ExitCode::SUCCESS)
         }
     }
@@ -204,6 +303,24 @@ fn handle_audit(command: cli::AuditCommand, config: &Config) -> Result<ExitCode,
         println!("{}", audit::render_markdown(&report));
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn print_lifecycle_result(
+    json: bool,
+    result: &modification::LifecycleResult,
+) -> Result<(), String> {
+    if json {
+        print_pretty(result)
+    } else {
+        println!(
+            "{} {:?}->{:?} at {}",
+            result.id,
+            result.from,
+            result.to,
+            result.path.display()
+        );
+        Ok(())
+    }
 }
 
 async fn handle_propose_skill(
@@ -358,6 +475,41 @@ fn print_entries(label: &str, entries: &[catalog::SkillEntry]) {
             entry.version,
             entry.description
         );
+    }
+}
+
+fn print_modification_text(
+    state: ModificationListState,
+    snapshot: modification::ModificationSnapshot,
+) {
+    match state {
+        ModificationListState::Proposed => {
+            println!("{}", modification::render_entries(&snapshot.proposed));
+        }
+        ModificationListState::Validated => {
+            println!("{}", modification::render_entries(&snapshot.validated));
+        }
+        ModificationListState::Active => {
+            println!("{}", modification::render_entries(&snapshot.active));
+        }
+        ModificationListState::Rejected => {
+            println!("{}", modification::render_entries(&snapshot.rejected));
+        }
+        ModificationListState::Retired => {
+            println!("{}", modification::render_entries(&snapshot.retired));
+        }
+        ModificationListState::All => {
+            println!("proposed\n--------");
+            println!("{}", modification::render_entries(&snapshot.proposed));
+            println!("\nvalidated\n---------");
+            println!("{}", modification::render_entries(&snapshot.validated));
+            println!("\nactive\n------");
+            println!("{}", modification::render_entries(&snapshot.active));
+            println!("\nrejected\n--------");
+            println!("{}", modification::render_entries(&snapshot.rejected));
+            println!("\nretired\n-------");
+            println!("{}", modification::render_entries(&snapshot.retired));
+        }
     }
 }
 

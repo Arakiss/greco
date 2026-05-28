@@ -21,6 +21,12 @@ Usage:
   greco validate-skill <path> [--json]
   greco eval list [--json]
   greco eval run <task-id|all> [--json]
+  greco propose --since <all|24h|7d|30m> [--json]
+  greco modification list [--state <proposed|validated|active|rejected|retired|all>] [--json]
+  greco modification show <id> [--json] [--diff]
+  greco modification validate <id> [--json]
+  greco modification apply <id> [--json]
+  greco modification revert <id> [--json]
   greco audit --since <all|24h|7d|30m> [--json]
   greco tui --snapshot
 
@@ -59,6 +65,8 @@ pub enum Command {
         json: bool,
     },
     Eval(EvalCommand),
+    Propose(ProposeCommand),
+    Modification(ModificationCommand),
     Audit(AuditCommand),
     TuiSnapshot,
 }
@@ -142,6 +150,47 @@ pub struct AuditCommand {
     pub json: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProposeCommand {
+    pub since: String,
+    pub json: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModificationCommand {
+    List {
+        state: ModificationListState,
+        json: bool,
+    },
+    Show {
+        id: String,
+        json: bool,
+        diff: bool,
+    },
+    Validate {
+        id: String,
+        json: bool,
+    },
+    Apply {
+        id: String,
+        json: bool,
+    },
+    Revert {
+        id: String,
+        json: bool,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModificationListState {
+    Proposed,
+    Validated,
+    Active,
+    Rejected,
+    Retired,
+    All,
+}
+
 pub fn parse_args(args: Vec<String>) -> Result<Command, String> {
     if args.is_empty() {
         return Ok(Command::Help);
@@ -159,6 +208,8 @@ pub fn parse_args(args: Vec<String>) -> Result<Command, String> {
         "catalog" => parse_catalog(&args[1..]),
         "validate-skill" => parse_validate_skill(&args[1..]),
         "eval" => parse_eval(&args[1..]),
+        "propose" => parse_propose(&args[1..]),
+        "modification" => parse_modification(&args[1..]),
         "audit" => parse_audit(&args[1..]),
         "tui" => {
             if args.iter().any(|arg| arg == "--snapshot") {
@@ -172,6 +223,81 @@ pub fn parse_args(args: Vec<String>) -> Result<Command, String> {
         }
         other => Err(format!("unknown command `{other}`; run `greco --help`")),
     }
+}
+
+fn parse_propose(args: &[String]) -> Result<Command, String> {
+    let mut since = "all".to_string();
+    let mut json = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--since" => {
+                index += 1;
+                since = args
+                    .get(index)
+                    .cloned()
+                    .ok_or_else(|| "--since requires all, or a duration like 24h".to_string())?;
+            }
+            "--json" => json = true,
+            other => return Err(format!("unknown propose option `{other}`")),
+        }
+        index += 1;
+    }
+    Ok(Command::Propose(ProposeCommand { since, json }))
+}
+
+fn parse_modification(args: &[String]) -> Result<Command, String> {
+    match args.first().map(String::as_str) {
+        Some("list") => parse_modification_list(&args[1..]),
+        Some("show") => Ok(Command::Modification(ModificationCommand::Show {
+            id: required_arg(args, 1, "modification id")?,
+            json: args.iter().any(|arg| arg == "--json"),
+            diff: args.iter().any(|arg| arg == "--diff"),
+        })),
+        Some("validate") => Ok(Command::Modification(ModificationCommand::Validate {
+            id: required_arg(args, 1, "modification id")?,
+            json: args.iter().any(|arg| arg == "--json"),
+        })),
+        Some("apply") => Ok(Command::Modification(ModificationCommand::Apply {
+            id: required_arg(args, 1, "modification id")?,
+            json: args.iter().any(|arg| arg == "--json"),
+        })),
+        Some("revert") => Ok(Command::Modification(ModificationCommand::Revert {
+            id: required_arg(args, 1, "modification id")?,
+            json: args.iter().any(|arg| arg == "--json"),
+        })),
+        Some(other) => Err(format!("unknown modification command `{other}`")),
+        None => Err("expected `greco modification <list|show|validate|apply|revert>`".to_string()),
+    }
+}
+
+fn parse_modification_list(args: &[String]) -> Result<Command, String> {
+    let mut state = ModificationListState::All;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--state" => {
+                index += 1;
+                state = match args.get(index).map(String::as_str) {
+                    Some("proposed") => ModificationListState::Proposed,
+                    Some("validated") => ModificationListState::Validated,
+                    Some("active") => ModificationListState::Active,
+                    Some("rejected") => ModificationListState::Rejected,
+                    Some("retired") => ModificationListState::Retired,
+                    Some("all") => ModificationListState::All,
+                    Some(other) => return Err(format!("unknown modification state `{other}`")),
+                    None => return Err("--state requires a value".to_string()),
+                };
+            }
+            "--json" => {}
+            other => return Err(format!("unknown modification list option `{other}`")),
+        }
+        index += 1;
+    }
+    Ok(Command::Modification(ModificationCommand::List {
+        state,
+        json: args.iter().any(|arg| arg == "--json"),
+    }))
 }
 
 fn parse_eval(args: &[String]) -> Result<Command, String> {
@@ -572,6 +698,34 @@ mod tests {
             parse_args(vec!["audit".into(), "--since".into(), "24h".into()]).unwrap(),
             Command::Audit(AuditCommand {
                 since: "24h".to_string(),
+                json: false,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_modification_apply() {
+        assert_eq!(
+            parse_args(vec![
+                "modification".into(),
+                "apply".into(),
+                "demo".into(),
+                "--json".into()
+            ])
+            .unwrap(),
+            Command::Modification(ModificationCommand::Apply {
+                id: "demo".to_string(),
+                json: true,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_propose_since() {
+        assert_eq!(
+            parse_args(vec!["propose".into(), "--since".into(), "all".into()]).unwrap(),
+            Command::Propose(ProposeCommand {
+                since: "all".to_string(),
                 json: false,
             })
         );

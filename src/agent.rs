@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use crate::{
     cli,
     config::Config,
+    modification,
     provider::{ModelProvider, ModelRequest, function_call_output, user_message},
     tools::{self, ToolResult},
     trajectory::Trajectory,
@@ -50,11 +51,12 @@ pub async fn run_agent<P: ModelProvider>(
     let mut input_items = vec![user_message(input)];
     let mut tool_call_count = 0;
     let mut friction = FrictionState::default();
+    let instructions = runtime_instructions(config)?;
 
     for turn in 1..=options.max_turns {
         let response = provider
             .respond(ModelRequest {
-                instructions: Some(cli::SYSTEM_PROMPT.to_string()),
+                instructions: Some(instructions.clone()),
                 input: input_items.clone(),
                 tools: tools::primitive_tool_specs(),
                 store: false,
@@ -209,6 +211,19 @@ pub async fn run_agent<P: ModelProvider>(
         options.max_turns,
         trace.path().display()
     ))
+}
+
+fn runtime_instructions(config: &Config) -> Result<String, String> {
+    let active = modification::active_layer_a_prompt(&config.home)?;
+    if active.trim().is_empty() {
+        Ok(cli::SYSTEM_PROMPT.to_string())
+    } else {
+        Ok(format!(
+            "{}\n\n<active_layer_a_procedures>\n{}\n</active_layer_a_procedures>",
+            cli::SYSTEM_PROMPT,
+            active
+        ))
+    }
 }
 
 #[derive(Debug, Default)]
@@ -412,8 +427,79 @@ mod tests {
         assert_eq!(outcome.turns, 2);
         assert_eq!(outcome.tool_calls, 1);
         assert!(outcome.trace_path.exists());
+        let requests = provider.requests.lock().unwrap();
+        assert!(
+            requests[0]
+                .instructions
+                .as_deref()
+                .unwrap_or_default()
+                .contains("minimal Rust coding-agent harness")
+        );
+        drop(requests);
         let trace = fs::read_to_string(&outcome.trace_path).unwrap();
         assert!(trace.contains("\"event\":\"friction_summary\""));
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn loads_active_layer_a_procedures_into_runtime_instructions() {
+        let workspace = temp_dir("active-procedure");
+        let home = workspace.join(".greco");
+        let active_dir = home
+            .join("modifications")
+            .join("active")
+            .join("layer-a-test");
+        fs::create_dir_all(&active_dir).unwrap();
+        let manifest = crate::modification::ModificationManifest {
+            id: "layer-a-test".to_string(),
+            version: "0.1.0".to_string(),
+            layer: crate::modification::ModificationLayer::A,
+            state: crate::modification::ModificationState::Active,
+            description: "test active cached procedure".to_string(),
+            friction_source: crate::modification::FrictionSource {
+                since: "all".to_string(),
+                session_count: 10,
+                eval_run_count: 5,
+                dominant_signal: "high-token-use".to_string(),
+                turns: 20,
+                tool_calls: 5,
+                tokens: 30_000,
+                repeated_errors: 0,
+                retracements: 0,
+                avoidable_prompts: 0,
+                missing_tool_failures: 0,
+            },
+            payload: crate::modification::ModificationPayload::CachedProcedure {
+                title: "Reduce high token use".to_string(),
+                body: "Read the smallest authoritative file first.".to_string(),
+                prompt_budget_chars: 1_200,
+            },
+            validation: None,
+            lineage: crate::modification::ModificationLineage {
+                parent_id: None,
+                reason: "test fixture".to_string(),
+            },
+            rollback: None,
+            created_at_unix_ms: 1,
+            applied_at_unix_ms: Some(2),
+            reverted_at_unix_ms: None,
+        };
+        let rendered = serde_json::to_string_pretty(&manifest).unwrap();
+        fs::write(active_dir.join("manifest.json"), rendered).unwrap();
+        let config = Config {
+            provider: "openai".to_string(),
+            model: "gpt-5.4".to_string(),
+            api_key: None,
+            api_key_source: None,
+            home,
+            workspace: workspace.clone(),
+        };
+
+        let instructions = runtime_instructions(&config).unwrap();
+
+        assert!(instructions.contains("<active_layer_a_procedures>"));
+        assert!(instructions.contains("Active procedure: Reduce high token use"));
+        assert!(instructions.contains("Read the smallest authoritative file first."));
         fs::remove_dir_all(workspace).unwrap();
     }
 
