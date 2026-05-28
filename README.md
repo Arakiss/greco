@@ -16,7 +16,7 @@
 
 > A Rust coding-agent harness that observes its own use and improves itself, within budgets and a suite the operator defines.
 
-**Development status: recalibrated alpha.** The original alpha cycle (`0.1.0-alpha.1` through `0.3.0-alpha.1`) explored a skill-catalog evolutionary axis. After the loop closed, a critical review concluded the axis was self-referential and did not test the deeper aspiration of the project. The axis was replaced; the implementation now begins again at `0.4.0-alpha.1`. The skill code is preserved as historical scaffolding.
+**Development status: recalibrated alpha.** The original alpha cycle (`0.1.0-alpha.1` through `0.3.0-alpha.1`) explored a skill-catalog evolutionary axis. After the loop closed, a critical review concluded the axis was self-referential and did not test the deeper aspiration of the project. The axis was replaced at `0.4.0-alpha.1`; `0.5.0-alpha.1` adds the first manual, reversible modification lifecycle. The skill code is preserved as historical scaffolding.
 
 Greco's evolutionary unit is the *harness modification*: a typed, layered, reversible change to the control plane around a frozen model. Session traces reveal friction. The agent proposes modifications. Modifications are validated empirically against an operator-defined evaluation suite within strict budgets. Modifications that meet thresholds are applied autonomously. The operator does not approve per proposal; the operator designs the experiment and audits aggregate behavior on a cadence.
 
@@ -64,7 +64,7 @@ The bet:
 
 ## Current Surface
 
-The alpha skill commands remain operational during the transition. Phase 1 (`0.4.0-alpha.1`) adds the first recalibrated instrumentation and baseline commands.
+The alpha skill commands remain operational as historical scaffolding. The recalibrated surface now has measurable eval/audit commands plus a manual modification lifecycle.
 
 Alpha skill commands (historical):
 
@@ -91,18 +91,18 @@ Recalibrated commands (Phase 1+):
 greco eval list
 greco eval run <task-id|all>
 greco audit --since <window>
+greco propose --since <window>
+greco modification list --state <state>
+greco modification show <id> [--diff]
+greco modification validate <id>
+greco modification apply <id>
+greco modification revert <id>
 ```
 
 Planned commands:
 
 ```sh
 greco eval probe <off-suite-task>
-greco propose [--since <window>]
-greco modification list --state <state>
-greco modification show <id> [--diff]
-greco modification validate <id>
-greco modification apply <id>
-greco modification revert <id>
 greco harness checkpoint list
 greco harness checkpoint restore <id>
 ```
@@ -245,11 +245,12 @@ src/
   cli.rs               manual argument parser
   config.rs            env and local config loading
   provider/            model-provider trait and OpenAI adapter
-  proposal.rs          alpha skill proposal (to be rewritten as friction-detection in Phase 2)
+  modification.rs      typed harness modification registry and lifecycle
+  proposal.rs          alpha skill proposal (historical skill-axis scaffold)
   tools.rs             primitive tool schemas and local execution
-  trajectory.rs        JSONL session traces (to gain friction instrumentation in Phase 1)
-  catalog.rs           alpha skill archive (to be rewritten as modification registry in Phase 2)
-  validation.rs        alpha skill validation (to be rewritten as suite-based validation in Phase 2)
+  trajectory.rs        JSONL session traces with friction instrumentation
+  catalog.rs           alpha skill archive (historical skill-axis scaffold)
+  validation.rs        alpha skill validation (historical skill-axis scaffold)
   tui.rs               plain-text operator snapshots
 docs/
   architecture/        design, critical analysis
@@ -257,7 +258,7 @@ docs/
 examples/skills/       alpha skill fixtures (retained as historical reference)
 ```
 
-New modules planned (Phase 1+): `eval`, `audit`, `subagent`, `harness`.
+Implemented recalibrated modules: `eval`, `audit`, `modification`. Later modules remain gated by the roadmap rather than phase-number versioning.
 
 ## Not In Scope
 
@@ -277,4 +278,4 @@ The roadmap declares explicit decision gates at the end of Phase 1, Phase 2, and
 
 ## Status Summary
 
-The alpha skill cycle is closed and documented. The recalibrated v0 begins at `0.4.0-alpha.1` with instrumentation and baseline (Phase 1). The tracked documentation set in `docs/` is the public product contract.
+The alpha skill cycle is closed and documented. The recalibrated v0 begins at `0.4.0-alpha.1` with instrumentation and baseline (Phase 1). `0.5.0-alpha.1` is the first release-gated Phase 2 alpha because it adds new CLI commands and a persistent modification-manifest format. The tracked documentation set in `docs/` is the public product contract.

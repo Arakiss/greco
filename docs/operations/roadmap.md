@@ -46,12 +46,14 @@ Outcome: loop closes. Critical review concludes the skill axis does not test the
 
 Decision gate: baseline friction signals stable enough for 5% delta detection.
 
-### Next alpha — Proposal pass with manual application (Phase 2)
+### 0.5.0-alpha.1 — Proposal pass with manual application (Phase 2)
 
-- Rewritten `proposal`, `catalog`, `validation` modules.
-- Subagent loader.
+- Filesystem-first `modification` registry with proposed, validated, active, rejected, and retired states.
+- Proposal pass over aggregate trace friction.
 - Operator commands for the full modification lifecycle, manual application only.
-- Layer A (cached procedures) and Layer S1 (subagent prompt edits) only.
+- Layer A (cached procedures) active and reversible; Layer S1 manifests inspectable but not runtime-critical.
+- Active Layer A procedures loaded into the runtime prompt under size limits.
+- Audit and TUI snapshots show lifecycle state and current active procedures.
 
 Decision gate: proposal precision and at least one applied modification moves the suite.
 

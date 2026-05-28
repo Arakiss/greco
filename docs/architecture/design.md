@@ -277,11 +277,14 @@ The plain-text snapshot pattern persists. Operator commands the system mostly th
 
 - `greco status [--json]`
 - `greco audit --since <window>`
-- `greco catalog list --state <proposed|validated|active|rejected|retired>`
+- `greco modification list --state <proposed|validated|active|rejected|retired|all>`
 - `greco modification show <id> [--diff]`
+- `greco modification validate <id>`
+- `greco modification apply <id>`
 - `greco modification revert <id>`
 - `greco eval list`
-- `greco propose --task <text>` (manual trigger of the proposal pass)
+- `greco eval run <task-id|all>`
+- `greco propose --since <window>` (manual trigger of the proposal pass)
 - `greco ask --input <text>` (regular agent use)
 - `greco tui --snapshot`
 
@@ -307,4 +310,4 @@ Semantic Versioning. Pre-1.0:
 - alpha/beta suffix until the Phase 3 acceptance gate passes;
 - roadmap phases are planning units, not automatic version numbers.
 
-The alpha cycle so far (`0.1.0-alpha.1` through `0.3.0-alpha.1`) covered the skill-axis exploration. `0.4.0-alpha.1` begins the recalibrated work because it introduces a materially new eval/audit/instrumentation surface. Later phase work receives a version only at its release gate.
+The alpha cycle so far (`0.1.0-alpha.1` through `0.3.0-alpha.1`) covered the skill-axis exploration. `0.4.0-alpha.1` begins the recalibrated work because it introduces a materially new eval/audit/instrumentation surface. `0.5.0-alpha.1` is justified by the new modification CLI and persistent manifest format, not by the Phase 2 label alone. Later phase work receives a version only at its release gate.
