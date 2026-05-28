@@ -1,6 +1,6 @@
 # Roadmap
 
-The original alpha cycle explored the skill catalog axis. After the loop closed, the axis was reviewed and replaced. See [`../architecture/recalibration.md`](../architecture/recalibration.md). The roadmap below preserves the alpha cycle as historical context and starts the recalibrated work at `0.4.0-alpha.1`.
+The original alpha cycle explored the skill catalog axis. After the loop closed, the axis was reviewed and replaced. The roadmap below preserves the alpha cycle as historical context and starts the recalibrated work at `0.4.0-alpha.1`.
 
 ## Alpha skill cycle (closed)
 
@@ -96,4 +96,4 @@ Pre-1.0 semantic versioning:
 
 ## Honest closure clause
 
-At every decision gate (Phase 1 end, Phase 2 end, Phase 3 end), the project closes if the gate fails. Closure is recorded as a final `What I learned` document in `docs/` and the repository is archived with the gate report. This clause is inherited from the Kappa RFC Appendix B and reaffirmed by the recalibration.
+At every decision gate (Phase 1 end, Phase 2 end, Phase 3 end), the project closes if the gate fails. Closure is recorded as a final `What I learned` document in `docs/` and the repository is archived with the gate report.

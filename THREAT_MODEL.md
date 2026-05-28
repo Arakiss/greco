@@ -1,6 +1,6 @@
 # Threat Model
 
-Greco is not a sandbox. It is a local harness that asks a model to select tools and may execute local subprocesses during tool use, validation, and now during the autonomous application of harness modifications. The current axis (harness self-improvement) introduces additional trust boundaries beyond the alpha skill cycle. See [`docs/architecture/recalibration.md`](docs/architecture/recalibration.md).
+Greco is not a sandbox. It is a local harness that asks a model to select tools and may execute local subprocesses during tool use, validation, and now during the autonomous application of harness modifications. The current axis (harness self-improvement) introduces additional trust boundaries beyond the alpha skill cycle.
 
 ## Assets
 
@@ -114,8 +114,8 @@ Mitigation:
 ## Operator Guidance
 
 - Use Greco first on non-critical repositories.
-- Keep normal Codex/Claude/Cursor sandboxing enabled when using those hosts around Greco.
-- Rotate any API key that has been pasted into chat before making the repository public.
+- Keep normal sandboxing enabled when using Greco around other coding tools.
+- Rotate any API key that has crossed an untrusted channel before making the repository public.
 - Review the audit report on cadence. Do not skip cadences.
 - Audit the suite before adding new tasks; criterion commands run locally with bounded but real privileges.
 - When in doubt about a modification, revert. The cost of rollback is one command. The cost of a quiet drift discovered late is much higher.

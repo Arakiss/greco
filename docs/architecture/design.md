@@ -4,7 +4,7 @@
 
 Greco is a terminal-first Rust coding-agent harness whose evolutionary unit is the harness itself. The model is not retrained. The agent observes its own use through session traces, proposes targeted modifications to the harness or its subagents, validates them empirically against an operator-defined evaluation suite within strict budgets, and applies or discards them autonomously. The operator does not approve per-proposal changes; the operator designs the experiment and audits aggregate behavior on a cadence.
 
-The original v0.1-v0.3-alpha cycle implemented a skill catalog and proved its loop closes. The current axis supersedes that work. See [`recalibration.md`](./recalibration.md) for the reasoning.
+The original v0.1-v0.3-alpha cycle implemented a skill catalog and proved its loop closes. The current axis supersedes that work.
 
 ## Architecture
 

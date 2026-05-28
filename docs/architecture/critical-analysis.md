@@ -6,7 +6,7 @@ This document answers the RFC's critical questions under the recalibrated axis. 
 
 The original RFC blindados (Section 4) remain in force with one substantive amendment.
 
-1. **"Skills are the evolutionary unit" no longer holds.** Implementation closed the loop, then revealed that skill admission was self-referential and the catalog had no measurable reuse channel. The recalibration replaces the evolutionary unit with the *harness modification* spanning layered, typed, reversible changes to the control plane around the model. See `recalibration.md`.
+1. **"Skills are the evolutionary unit" no longer holds.** Implementation closed the loop, then revealed that skill admission was self-referential and the catalog had no measurable reuse channel. The current axis replaces the evolutionary unit with the *harness modification* spanning layered, typed, reversible changes to the control plane around the model.
 
 2. **"No provider abstraction" is unchanged.** The narrow `ModelProvider` trait with one OpenAI implementation survives.
 
@@ -121,12 +121,12 @@ No per-proposal approval at any phase from Phase 3 onward except for Layer E.
 
 ## Honest disposition to close
 
-The RFC Section 11 and Appendix B clause persists: if the hypothesis does not stand, the project closes. The recalibration adds explicit decision gates at the end of Phase 1, Phase 2, and Phase 3. Each gate has a structural failure mode (noisy signals, junk proposals, no measurable aggregate improvement). Reaching any gate without passing it triggers an honest closure with a final `What I learned` document.
+The RFC Section 11 and Appendix B clause persists: if the hypothesis does not stand, the project closes. The roadmap adds explicit decision gates at the end of Phase 1, Phase 2, and Phase 3. Each gate has a structural failure mode (noisy signals, junk proposals, no measurable aggregate improvement). Reaching any gate without passing it triggers an honest closure with a final `What I learned` document.
 
 ## Historical: alpha skill cycle answers (for the record)
 
 - "No provider abstraction" was already amended in the alpha review to permit a narrow trait with one implementation. That amendment carries forward.
 - "Cargo install kappa" was already replaced by `greco-cli` with binary `greco`. Unchanged.
-- "Pi-style local skill accumulation with empirical admission" was the alpha thesis. Closed by the recalibration; documented above.
+- "Pi-style local skill accumulation with empirical admission" was the alpha thesis. Closed by the current axis; documented above.
 - "Filesystem-first archive" was correct at alpha and remains correct at v0.4.
 - "Subprocess invocation for skills" no longer load-bearing; modifications are not invoked, they are applied.

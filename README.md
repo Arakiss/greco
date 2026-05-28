@@ -16,7 +16,7 @@
 
 > A Rust coding-agent harness that observes its own use and improves itself, within budgets and a suite the operator defines.
 
-**Development status: recalibrated alpha.** The original alpha cycle (`0.1.0-alpha.1` through `0.3.0-alpha.1`) explored a skill-catalog evolutionary axis. After the loop closed, a critical review concluded the axis was self-referential and did not test the deeper aspiration of the project. The axis was replaced; the implementation now begins again at `0.4.0-alpha.1`. The skill code is preserved as historical scaffolding. See [`docs/architecture/recalibration.md`](docs/architecture/recalibration.md) for the reasoning.
+**Development status: recalibrated alpha.** The original alpha cycle (`0.1.0-alpha.1` through `0.3.0-alpha.1`) explored a skill-catalog evolutionary axis. After the loop closed, a critical review concluded the axis was self-referential and did not test the deeper aspiration of the project. The axis was replaced; the implementation now begins again at `0.4.0-alpha.1`. The skill code is preserved as historical scaffolding.
 
 Greco's evolutionary unit is the *harness modification*: a typed, layered, reversible change to the control plane around a frozen model. Session traces reveal friction. The agent proposes modifications. Modifications are validated empirically against an operator-defined evaluation suite within strict budgets. Modifications that meet thresholds are applied autonomously. The operator does not approve per proposal; the operator designs the experiment and audits aggregate behavior on a cadence.
 
@@ -41,7 +41,7 @@ Most "self-improving agent" talk collapses three different things: reasoning bet
 
 The bet:
 
-- **The harness is the right unit.** Hosted assistants (Cursor, Claude Code, Codex CLI) iterate their harnesses with humans in the loop because their harness is shared by millions. A *local, single-operator* harness can do the iteration autonomously under strict budgets and audit.
+- **The harness is the right unit.** Shared coding-agent products keep harness evolution conservative because their control plane affects many users. A *local, single-operator* harness can test autonomous iteration under strict budgets and audit.
 - **Layered modifications.** Cached procedures and subagent prompt edits are cheap and low-risk; settings and permissions are expensive and high-risk. The system gates by layer, not by uniform rule.
 - **Empirical admission against a real suite.** A modification is "an improvement" only if it reduces measurable friction on tasks the operator actually cares about. Proposal-level approval is replaced by suite-level evidence.
 - **The human is not a notary.** The operator designs the suite, the budgets, and the thresholds. The operator audits aggregate behavior on cadence. Per-proposal approval is eliminated for the autonomous layers.
@@ -209,13 +209,10 @@ No per-proposal approval at any phase from Phase 3 onward except for Layer E.
 
 See:
 
-- [`docs/architecture/recalibration.md`](docs/architecture/recalibration.md) — pivot reasoning
 - [`docs/architecture/design.md`](docs/architecture/design.md) — v0 design under the new axis
 - [`docs/architecture/critical-analysis.md`](docs/architecture/critical-analysis.md) — answers to the RFC critical questions under the new axis
-- [`docs/operations/implementation-plan.md`](docs/operations/implementation-plan.md) — phased plan with decision gates
 - [`docs/operations/roadmap.md`](docs/operations/roadmap.md) — versioned roadmap
-- [`docs/operations/risks.md`](docs/operations/risks.md) — risks and mitigations
-- [`docs/research/current-source-review.md`](docs/research/current-source-review.md) — research pass with updated conclusions
+- [`docs/operations/secret-handling.md`](docs/operations/secret-handling.md) — credential handling rules
 - [`THREAT_MODEL.md`](THREAT_MODEL.md) — assets, boundaries, controls, new threats from self-modification
 
 ## Development
@@ -250,9 +247,8 @@ src/
   validation.rs        alpha skill validation (to be rewritten as suite-based validation in Phase 2)
   tui.rs               plain-text operator snapshots
 docs/
-  research/            current-source review with updated conclusions
-  architecture/        recalibration, design, critical analysis
-  operations/          implementation plan, roadmap, risks, secret handling
+  architecture/        design, critical analysis
+  operations/          roadmap, secret handling
 examples/skills/       alpha skill fixtures (retained as historical reference)
 ```
 
@@ -272,8 +268,8 @@ New modules planned (Phase 1+): `eval`, `audit`, `subagent`, `harness`.
 
 ## Honest Closure
 
-The recalibration document and the implementation plan declare explicit decision gates at the end of Phase 1, Phase 2, and Phase 3. Each gate has a structural failure mode (noisy friction signals, junk proposals, no measurable aggregate improvement). Failing any gate triggers an honest closure with a final `What I learned` document. The point of the recalibration is not to extend the project at any cost. It is to give the project a thesis that can actually be tested.
+The roadmap declares explicit decision gates at the end of Phase 1, Phase 2, and Phase 3. Each gate has a structural failure mode (noisy friction signals, junk proposals, no measurable aggregate improvement). Failing any gate triggers an honest closure with a final `What I learned` document. The point of the recalibration is not to extend the project at any cost. It is to give the project a thesis that can actually be tested.
 
 ## Status Summary
 
-The alpha skill cycle is closed and documented. The recalibrated v0 begins at `0.4.0-alpha.1` with instrumentation and baseline (Phase 1). Codex is the implementation owner from this point forward; the documentation set in `docs/` is the contract.
+The alpha skill cycle is closed and documented. The recalibrated v0 begins at `0.4.0-alpha.1` with instrumentation and baseline (Phase 1). The tracked documentation set in `docs/` is the public product contract.

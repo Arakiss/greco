@@ -15,7 +15,7 @@ Rules:
 - Do not commit `.env.local`.
 - Do not write API keys into docs, tests, fixtures, commit messages, or shell transcripts.
 - Prefer user-level secure storage for long-lived credentials when packaging catches up.
-- Treat any API key pasted into an assistant transcript as exposed and rotate it before public release.
+- Treat any API key copied into an untrusted channel as exposed and rotate it before public release.
 
 Verification:
 
