@@ -1,52 +1,51 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 420" role="img" aria-labelledby="t d">
-  <title id="t">Greco</title>
-  <desc id="d">The greco wordmark beside a fixed core (a frozen model) inside a flowing clay ring (the evolving harness).</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 420" role="img" aria-label="Greco — a frozen model held inside a luminous self-improving loop, with modifications riding it">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0.85" y2="1">
-      <stop offset="0" stop-color="#17120f"/>
-      <stop offset="1" stop-color="#221b16"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#160f0c"/><stop offset="1" stop-color="#251a13"/>
     </linearGradient>
     <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0" stop-color="#d97757" stop-opacity="0.16"/>
+      <stop offset="0" stop-color="#e8835f" stop-opacity="0.34"/>
+      <stop offset="0.45" stop-color="#d97757" stop-opacity="0.1"/>
       <stop offset="1" stop-color="#d97757" stop-opacity="0"/>
     </radialGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f0a07e"/><stop offset="0.5" stop-color="#d97757"/><stop offset="1" stop-color="#b85c40"/>
+    </linearGradient>
   </defs>
 
   <rect width="1400" height="420" fill="url(#bg)"/>
-  <circle cx="1115" cy="210" r="250" fill="url(#glow)"/>
   <rect x="0" y="0" width="1400" height="3" fill="#d97757" opacity="0.9"/>
+  <circle cx="700" cy="210" r="380" fill="url(#glow)"/>
 
-  <!-- wordmark -->
-  <g transform="translate(150 0)">
-    <text x="0" y="262" font-family="Georgia, 'Iowan Old Style', 'Times New Roman', serif" font-size="172" font-weight="600" letter-spacing="-4" fill="#f3ece4">greco</text>
-    <rect x="6" y="292" width="132" height="6" rx="3" fill="#d97757"/>
+  <!-- the harness radiating outward as a field -->
+  <g fill="none" stroke="#d97757">
+    <circle cx="700" cy="210" r="300" stroke-opacity="0.06"/>
+    <circle cx="700" cy="210" r="430" stroke-opacity="0.04"/>
+    <circle cx="700" cy="210" r="600" stroke-opacity="0.025"/>
   </g>
 
-  <!-- motif: a frozen core inside an evolving harness -->
-  <g transform="translate(1115 210)">
+  <g transform="translate(700 210)">
+    <!-- the self-improving loop: layered strokes fake a luminous glow -->
+    <g fill="none" stroke-linecap="round">
+      <path d="M 40 -148 A 153 153 0 1 1 -40 -148" stroke="#d97757" stroke-width="22" stroke-opacity="0.14"/>
+      <path d="M 40 -148 A 153 153 0 1 1 -40 -148" stroke="#d97757" stroke-width="12" stroke-opacity="0.28"/>
+      <path d="M 40 -148 A 153 153 0 1 1 -40 -148" stroke="url(#ring)" stroke-width="6"/>
+    </g>
+    <!-- flow arrowhead: the loop closing back on itself (clockwise) -->
+    <polygon points="-20,-158 -50,-150 -40,-130" fill="#f0a07e"/>
 
-    <!-- evolving harness: a flowing clay ring -->
-    <circle r="118" fill="none" stroke="#d97757" stroke-width="2.5" opacity="0.92"/>
-    <!-- clockwise flow cue at the top -->
-    <polygon points="11,-118 -4,-124 -4,-112" fill="#d97757"/>
-    <!-- a few nodes where the harness changes -->
-    <g fill="#221b16" stroke="#d97757" stroke-width="2.5">
-      <circle cx="59" cy="102.2" r="7"/>
-      <circle cx="-118" cy="0" r="7"/>
-      <circle cx="59" cy="-102.2" r="7"/>
-    </g>
+    <!-- modifications riding the loop, in different states -->
+    <circle cx="153" cy="0" r="11" fill="#f0a07e"/>
+    <circle cx="-108" cy="108" r="8" fill="#d97757"/>
+    <circle cx="-153" cy="0" r="6" fill="#241c17" stroke="#d97757" stroke-width="2.5"/>
+    <circle cx="108" cy="108" r="6" fill="#241c17" stroke="#d97757" stroke-width="2.5"/>
 
-    <!-- frozen core: a static, muted chip with a fixed clay center -->
-    <g stroke="#71604f" stroke-width="2" fill="none" stroke-linejoin="round">
-      <rect x="-34" y="-34" width="68" height="68" rx="11"/>
-      <rect x="-17" y="-17" width="34" height="34" rx="5"/>
+    <!-- the frozen model: a solid, static core that never changes -->
+    <rect x="-40" y="-40" width="80" height="80" rx="14" fill="#2b211a" stroke="#8a7460" stroke-width="2.5"/>
+    <g stroke="#8a7460" stroke-width="2.5" stroke-linecap="round">
+      <path d="M-16 -40 V-52 M0 -40 V-52 M16 -40 V-52 M-16 40 V52 M0 40 V52 M16 40 V52"/>
+      <path d="M-40 -16 H-52 M-40 0 H-52 M-40 16 H-52 M40 -16 H52 M40 0 H52 M40 16 H52"/>
     </g>
-    <g stroke="#71604f" stroke-width="2" stroke-linecap="round">
-      <path d="M-14 -34 V-44 M0 -34 V-44 M14 -34 V-44"/>
-      <path d="M-14 34 V44 M0 34 V44 M14 34 V44"/>
-      <path d="M-34 -14 H-44 M-34 0 H-44 M-34 14 H-44"/>
-      <path d="M34 -14 H44 M34 0 H44 M34 14 H44"/>
-    </g>
-    <rect x="-5" y="-5" width="10" height="10" rx="2.5" fill="#d97757"/>
+    <rect x="-13" y="-13" width="26" height="26" rx="6" fill="#d97757"/>
   </g>
 </svg>
