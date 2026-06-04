@@ -98,7 +98,7 @@ pub async fn write_file(
     path: &Path,
     content: &str,
 ) -> Result<ToolResult, String> {
-    let target = guarded_path(workspace, path)?;
+    let target = guarded_write_path(workspace, path)?;
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent)
             .await
@@ -119,7 +119,7 @@ pub async fn edit_file(
     find: &str,
     replace: &str,
 ) -> Result<ToolResult, String> {
-    let target = guarded_path(workspace, path)?;
+    let target = guarded_write_path(workspace, path)?;
     let content = fs::read_to_string(&target)
         .await
         .map_err(|err| format!("read before edit failed: {err}"))?;
@@ -136,16 +136,22 @@ pub async fn edit_file(
     })
 }
 
+/// Upper bound on a single shell invocation, even if the model requests more.
+/// The per-call `timeout_seconds` is model-controlled, so an unbounded value
+/// could pin a core indefinitely; clamp it to a generous operator ceiling.
+pub const MAX_BASH_TIMEOUT_SECONDS: u64 = 900;
+
 pub async fn run_bash(
     workspace: &Path,
     command: &str,
     timeout_seconds: u64,
 ) -> Result<ToolResult, String> {
+    let timeout_seconds = timeout_seconds.clamp(1, MAX_BASH_TIMEOUT_SECONDS);
     let child = Command::new("/bin/sh")
         .arg("-c")
         .arg(command)
         .env_clear()
-        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+        .envs(sandbox_env())
         .current_dir(workspace)
         .kill_on_drop(true)
         .output();
@@ -220,6 +226,50 @@ where
     serde_json::from_str(arguments).map_err(|err| format!("invalid tool arguments: {err}"))
 }
 
+/// Curated environment for sandboxed shell execution.
+///
+/// We start from a *cleared* environment and re-admit only an allowlist of
+/// non-secret variables. This keeps credentials (e.g. `OPENAI_API_KEY`) out of
+/// model- and suite-issued commands while still letting the real toolchain
+/// (`cargo`, `rustc`, `git`, `rg`) resolve. A hardcoded minimal `PATH` silently
+/// broke `cargo`/`rustc` on Homebrew and rustup layouts, so we inherit the real
+/// `PATH` (which is not a secret) and the toolchain home dirs instead.
+pub(crate) fn sandbox_env() -> Vec<(String, String)> {
+    const ALLOW: &[&str] = &[
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "LANG",
+        "LANGUAGE",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TERM",
+        "TMPDIR",
+        "TZ",
+        "CARGO_HOME",
+        "RUSTUP_HOME",
+        "CARGO_TARGET_DIR",
+        "RUST_BACKTRACE",
+    ];
+    let mut env: Vec<(String, String)> = ALLOW
+        .iter()
+        .filter_map(|key| {
+            std::env::var(key)
+                .ok()
+                .map(|value| ((*key).to_string(), value))
+        })
+        .collect();
+    if !env.iter().any(|(key, _)| key == "PATH") {
+        env.push((
+            "PATH".to_string(),
+            "/usr/bin:/bin:/usr/sbin:/sbin".to_string(),
+        ));
+    }
+    env
+}
+
 fn guarded_path(workspace: &Path, path: &Path) -> Result<PathBuf, String> {
     if path.is_absolute() {
         return Err("absolute paths are not allowed".to_string());
@@ -230,7 +280,58 @@ fn guarded_path(workspace: &Path, path: &Path) -> Result<PathBuf, String> {
     {
         return Err("parent path traversal is not allowed".to_string());
     }
-    Ok(workspace.join(path))
+    confine_to_workspace(workspace, &workspace.join(path))
+}
+
+/// Write/edit guard: a confined workspace path that additionally refuses to
+/// touch the `.greco` harness state and eval suite. Three contract docs declare
+/// the suite "read-only for the agent"; the primitive layer now enforces it
+/// instead of trusting convention.
+fn guarded_write_path(workspace: &Path, path: &Path) -> Result<PathBuf, String> {
+    let resolved = guarded_path(workspace, path)?;
+    let home = workspace.join(".greco");
+    let home_root = home.canonicalize().unwrap_or(home);
+    if resolved.starts_with(&home_root) {
+        return Err(
+            "the .greco harness state and eval suite are read-only for the agent".to_string(),
+        );
+    }
+    Ok(resolved)
+}
+
+/// Resolve symlinks in the existing prefix of `target` and confirm the result
+/// stays inside `workspace`. A lexical `..`/absolute check is not enough: an
+/// in-workspace symlink pointing outside would otherwise be followed. The
+/// not-yet-existing tail cannot contain symlinks, so canonicalizing the longest
+/// existing ancestor and re-appending the tail is sufficient.
+fn confine_to_workspace(workspace: &Path, target: &Path) -> Result<PathBuf, String> {
+    let workspace_root = workspace
+        .canonicalize()
+        .map_err(|err| format!("cannot resolve workspace: {err}"))?;
+    let mut existing = target;
+    let mut tail: Vec<std::ffi::OsString> = Vec::new();
+    let resolved_prefix = loop {
+        match existing.canonicalize() {
+            Ok(resolved) => break resolved,
+            Err(_) => match existing.parent() {
+                Some(parent) => {
+                    if let Some(name) = existing.file_name() {
+                        tail.push(name.to_os_string());
+                    }
+                    existing = parent;
+                }
+                None => return Err("cannot resolve path within workspace".to_string()),
+            },
+        }
+    };
+    let mut resolved = resolved_prefix;
+    for name in tail.into_iter().rev() {
+        resolved.push(name);
+    }
+    if !resolved.starts_with(&workspace_root) {
+        return Err("path escapes the workspace".to_string());
+    }
+    Ok(resolved)
 }
 
 #[cfg(test)]
@@ -309,6 +410,73 @@ mod tests {
         let result = run_bash(&workspace, "sleep 2", 1).await;
         assert_eq!(result.unwrap_err(), "command timed out after 1s");
         fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn denies_writes_into_greco_state_but_allows_reads() {
+        let workspace = temp_dir("greco-deny");
+        fs::create_dir_all(workspace.join(".greco").join("eval")).unwrap();
+
+        // write/edit must be refused inside the read-only harness state
+        assert!(guarded_write_path(&workspace, Path::new(".greco/eval/task.json")).is_err());
+        assert!(guarded_write_path(&workspace, Path::new(".greco/state/loop.json")).is_err());
+        // ordinary workspace writes still pass
+        assert!(guarded_write_path(&workspace, Path::new("src/main.rs")).is_ok());
+        // reads of the suite remain allowed
+        assert!(guarded_path(&workspace, Path::new(".greco/eval/task.json")).is_ok());
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn confines_in_workspace_symlink_escape() {
+        let workspace = temp_dir("greco-symlink-ws");
+        let outside = temp_dir("greco-symlink-out");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        // a symlink inside the workspace pointing outside must not be writable through
+        std::os::unix::fs::symlink(&outside, workspace.join("escape")).unwrap();
+
+        let result = guarded_write_path(&workspace, Path::new("escape/evil.txt"));
+        assert!(
+            result.is_err(),
+            "symlink escape was not confined: {result:?}"
+        );
+
+        fs::remove_dir_all(&workspace).unwrap();
+        fs::remove_dir_all(&outside).unwrap();
+    }
+
+    #[test]
+    fn sandbox_env_only_returns_allowlisted_non_secret_keys() {
+        let allow: std::collections::HashSet<&str> = [
+            "PATH",
+            "HOME",
+            "USER",
+            "LOGNAME",
+            "SHELL",
+            "LANG",
+            "LANGUAGE",
+            "LC_ALL",
+            "LC_CTYPE",
+            "TERM",
+            "TMPDIR",
+            "TZ",
+            "CARGO_HOME",
+            "RUSTUP_HOME",
+            "CARGO_TARGET_DIR",
+            "RUST_BACKTRACE",
+        ]
+        .into_iter()
+        .collect();
+        for (key, _) in sandbox_env() {
+            assert!(
+                allow.contains(key.as_str()),
+                "sandbox_env leaked a non-allowlisted variable: {key}"
+            );
+        }
+        // a credential variable can never be emitted because it is not allowlisted
+        assert!(!allow.contains("OPENAI_API_KEY"));
     }
 
     fn temp_dir(label: &str) -> PathBuf {
