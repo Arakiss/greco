@@ -25,10 +25,14 @@ pub struct AgentOutcome {
     pub turns: usize,
     pub tool_calls: usize,
     pub trace_path: PathBuf,
+    /// Whether the model produced a final answer within the turn budget. False
+    /// means turns were exhausted while still calling tools; the partial work is
+    /// still on disk and worth grading (eval) or surfacing (ask).
+    pub completed: bool,
 }
 
-pub async fn run_agent<P: ModelProvider>(
-    provider: &P,
+pub async fn run_agent(
+    provider: &dyn ModelProvider,
     config: &Config,
     input: String,
     options: AgentOptions,
@@ -128,6 +132,7 @@ pub async fn run_agent<P: ModelProvider>(
                 turns: turn,
                 tool_calls: tool_call_count,
                 trace_path: trace.path().to_path_buf(),
+                completed: true,
             });
         }
 
@@ -219,11 +224,16 @@ pub async fn run_agent<P: ModelProvider>(
             }),
         )
         .await?;
-    Err(format!(
-        "model did not finish after {} turns; trace written to {}",
-        options.max_turns,
-        trace.path().display()
-    ))
+    // Turn budget exhausted while still calling tools. This is not an error for
+    // grading: return the partial outcome so the eval can score what the solver
+    // produced and `ask` can surface it, both flagged as not completed.
+    Ok(AgentOutcome {
+        output_text: String::new(),
+        turns: options.max_turns,
+        tool_calls: tool_call_count,
+        trace_path: trace.path().to_path_buf(),
+        completed: false,
+    })
 }
 
 #[derive(Debug, Clone)]

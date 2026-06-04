@@ -8,6 +8,8 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncReadExt, process::Command, time};
 
+use crate::{agent, config::Config, provider::ModelProvider};
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EvalTask {
     pub id: String,
@@ -175,6 +177,139 @@ pub fn render_run_report(report: &EvalRunReport) -> String {
         ));
     }
     lines.join("\n")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SolveReport {
+    pub task: EvalTaskSummary,
+    pub success: bool,
+    pub solver_completed: bool,
+    pub solver_turns: usize,
+    pub solver_tool_calls: usize,
+    pub solver_output: String,
+    pub solver_trace: PathBuf,
+    pub snapshot: PathBuf,
+    pub criteria: Vec<EvalCriterionReport>,
+    pub wall_ms: u128,
+}
+
+/// Run the *solver* (the model) on an eval task inside an isolated copy of the
+/// workspace, then grade the copy with the task criteria. This is the missing
+/// causal link the deterministic `run_task` never exercised: a Layer A
+/// procedure only changes behavior through the model's prompt, so a meaningful
+/// objective signal requires the model to actually attempt the task. `home`
+/// selects the harness state the solver loads (a candidate sandbox or the live
+/// `.greco`); the snapshot is a throwaway the solver may freely edit.
+pub async fn solve_task(
+    home: &Path,
+    workspace: &Path,
+    base_config: &Config,
+    provider: &dyn ModelProvider,
+    task_id: &str,
+) -> Result<SolveReport, String> {
+    let task = load_task(home, task_id)?;
+    let started = Instant::now();
+
+    let snapshot = snapshot_workspace(home, workspace, &task.id)?;
+    let solver_config = base_config.for_solver(snapshot.clone(), home.to_path_buf());
+    let outcome = agent::run_agent(
+        provider,
+        &solver_config,
+        task.prompt.clone(),
+        agent::AgentOptions {
+            max_turns: task.budget.max_turns.max(1),
+        },
+    )
+    .await?;
+
+    let mut criteria = Vec::new();
+    for criterion in &task.criteria {
+        criteria.push(run_criterion(home, &snapshot, criterion).await?);
+    }
+    let success = criteria.iter().all(|criterion| criterion.success);
+
+    Ok(SolveReport {
+        task: task_summary(&task),
+        success,
+        solver_completed: outcome.completed,
+        solver_turns: outcome.turns,
+        solver_tool_calls: outcome.tool_calls,
+        solver_output: outcome.output_text,
+        solver_trace: outcome.trace_path,
+        snapshot,
+        criteria,
+        wall_ms: started.elapsed().as_millis(),
+    })
+}
+
+pub fn render_solve_report(report: &SolveReport) -> String {
+    let mut lines = vec![
+        format!("solve task: {} - {}", report.task.id, report.task.title),
+        format!(
+            "solver: turns={} tools={} completed={}",
+            report.solver_turns, report.solver_tool_calls, report.solver_completed
+        ),
+        format!("success: {}", report.success),
+        format!("snapshot: {}", report.snapshot.display()),
+        format!("trace: {}", report.solver_trace.display()),
+        format!("wall_ms: {}", report.wall_ms),
+    ];
+    for criterion in &report.criteria {
+        lines.push(format!(
+            "- {} success={} exit={:?} timeout={} wall_ms={}",
+            criterion.id,
+            criterion.success,
+            criterion.exit_code,
+            criterion.timed_out,
+            criterion.wall_ms
+        ));
+    }
+    lines.join("\n")
+}
+
+/// Copy the workspace into a throwaway directory the solver can edit, excluding
+/// the build output and harness state. `target` is excluded because it can be
+/// gigabytes; `.greco` is excluded because the harness state is provided
+/// separately via `GRECO_HOME`. Everything else (sources, docs, `.git`) is
+/// copied so file-, git-, and cargo-based criteria all resolve.
+fn snapshot_workspace(home: &Path, workspace: &Path, task_id: &str) -> Result<PathBuf, String> {
+    let dest = home.join("state").join("solve-snapshots").join(format!(
+        "{}-{}",
+        sanitize_file_name(task_id),
+        now_millis()
+    ));
+    fs::create_dir_all(&dest).map_err(|err| format!("cannot create solve snapshot: {err}"))?;
+    copy_tree_filtered(workspace, &dest)?;
+    Ok(dest)
+}
+
+fn copy_tree_filtered(source: &Path, dest: &Path) -> Result<(), String> {
+    const EXCLUDE_TOP_LEVEL: &[&str] = &["target", ".greco"];
+    for entry in
+        fs::read_dir(source).map_err(|err| format!("cannot read {}: {err}", source.display()))?
+    {
+        let entry = entry.map_err(|err| format!("cannot read snapshot entry: {err}"))?;
+        let name = entry.file_name();
+        // Only the workspace root carries `target`/`.greco`; excluding by name
+        // at every level is fine because no nested dir legitimately uses them.
+        if EXCLUDE_TOP_LEVEL.contains(&name.to_string_lossy().as_ref()) {
+            continue;
+        }
+        let file_type = entry
+            .file_type()
+            .map_err(|err| format!("cannot read snapshot entry type: {err}"))?;
+        let from = entry.path();
+        let to = dest.join(&name);
+        if file_type.is_dir() {
+            fs::create_dir_all(&to)
+                .map_err(|err| format!("cannot create {}: {err}", to.display()))?;
+            copy_tree_filtered(&from, &to)?;
+        } else if file_type.is_file() {
+            fs::copy(&from, &to).map_err(|err| format!("cannot copy {}: {err}", to.display()))?;
+        }
+        // Symlinks are intentionally skipped so the snapshot cannot alias outside.
+    }
+    Ok(())
 }
 
 fn load_task(home: &Path, task_id: &str) -> Result<EvalTask, String> {
@@ -399,6 +534,112 @@ mod tests {
 
         fs::remove_dir_all(&home).unwrap();
         fs::remove_dir_all(&workspace).unwrap();
+    }
+
+    struct SolveFakeProvider {
+        calls: std::sync::Mutex<usize>,
+    }
+
+    impl crate::provider::ModelProvider for SolveFakeProvider {
+        fn respond<'a>(
+            &'a self,
+            _request: crate::provider::ModelRequest,
+        ) -> crate::provider::ProviderFuture<'a, crate::provider::ModelResponse> {
+            Box::pin(async move {
+                let mut calls = self.calls.lock().unwrap();
+                let index = *calls;
+                *calls += 1;
+                if index == 0 {
+                    // turn 1: write a file the criterion will grade
+                    Ok(crate::provider::ModelResponse {
+                        id: "r1".to_string(),
+                        output_text: String::new(),
+                        tool_calls: vec![crate::provider::ToolCall {
+                            call_id: "c1".to_string(),
+                            name: "write".to_string(),
+                            arguments: "{\"path\":\"result.txt\",\"content\":\"solved\"}"
+                                .to_string(),
+                        }],
+                        output_items: vec![serde_json::json!({
+                            "id": "fc1",
+                            "type": "function_call",
+                            "call_id": "c1",
+                            "name": "write",
+                            "arguments": "{\"path\":\"result.txt\",\"content\":\"solved\"}"
+                        })],
+                        raw: serde_json::json!({"id": "r1"}),
+                    })
+                } else {
+                    // turn 2: finish
+                    Ok(crate::provider::ModelResponse {
+                        id: "r2".to_string(),
+                        output_text: "done".to_string(),
+                        tool_calls: Vec::new(),
+                        output_items: vec![serde_json::json!({
+                            "type": "message",
+                            "content": [{"type": "output_text", "text": "done"}]
+                        })],
+                        raw: serde_json::json!({"id": "r2"}),
+                    })
+                }
+            })
+        }
+
+        fn stream_text<'a>(
+            &'a self,
+            _request: crate::provider::ModelRequest,
+        ) -> crate::provider::ProviderFuture<'a, String> {
+            Box::pin(async move { Ok(String::new()) })
+        }
+    }
+
+    #[tokio::test]
+    async fn solve_task_runs_solver_in_isolated_snapshot_and_grades_it() {
+        let home = temp_dir("solve-home");
+        let workspace = temp_dir("solve-ws");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join("seed.txt"), "seed").unwrap();
+        fs::create_dir_all(home.join("eval").join("solve-demo")).unwrap();
+        fs::write(
+            home.join("eval").join("solve-demo").join("task.json"),
+            r#"{"id":"solve-demo","title":"Solve demo","kind":"bug_fix","prompt":"create result.txt","budget":{"max_turns":4,"max_wall_seconds":30},"criteria":[{"id":"made","command":"test -f result.txt","timeout_seconds":5}]}"#,
+        )
+        .unwrap();
+        let base = Config {
+            provider: "openai".to_string(),
+            model: "test".to_string(),
+            api_key: None,
+            api_key_source: None,
+            home: home.clone(),
+            workspace: workspace.clone(),
+        };
+        let provider = SolveFakeProvider {
+            calls: std::sync::Mutex::new(0),
+        };
+
+        let report = solve_task(&home, &workspace, &base, &provider, "solve-demo")
+            .await
+            .unwrap();
+
+        assert!(report.success, "criteria failed: {:?}", report.criteria);
+        assert_eq!(report.solver_tool_calls, 1);
+        // the solver's edit lands in the snapshot...
+        assert!(
+            report.snapshot.join("result.txt").exists(),
+            "solver edit missing from snapshot"
+        );
+        assert!(
+            report.snapshot.join("seed.txt").exists(),
+            "snapshot did not copy the workspace"
+        );
+        // ...and the real workspace is left untouched (isolation invariant).
+        assert!(
+            !workspace.join("result.txt").exists(),
+            "solver leaked into the real workspace"
+        );
+
+        fs::remove_dir_all(&home).ok();
+        fs::remove_dir_all(&workspace).ok();
     }
 
     fn temp_dir(label: &str) -> PathBuf {

@@ -89,6 +89,9 @@ async fn run() -> Result<ExitCode, String> {
                 agent::run_agent(&provider, &config, input, agent::AgentOptions { max_turns })
                     .await?;
             println!("{}", outcome.output_text);
+            if !outcome.completed {
+                eprintln!("greco: model did not finish within {max_turns} turns (partial)");
+            }
             eprintln!(
                 "greco: trace={} turns={} tools={}",
                 outcome.trace_path.display(),
@@ -329,6 +332,25 @@ async fn handle_eval(command: EvalCommand, config: &Config) -> Result<ExitCode, 
                 println!("{}", eval::render_task_list(&tasks));
             }
             Ok(ExitCode::SUCCESS)
+        }
+        EvalCommand::Solve { task_id, json } => {
+            let api_key = config.api_key.clone().ok_or_else(|| {
+                "OPENAI_API_KEY is missing; copy .env.example to .env.local".to_string()
+            })?;
+            let provider = OpenAiProvider::new(api_key, config.model.clone());
+            let report =
+                eval::solve_task(&config.home, &config.workspace, config, &provider, &task_id)
+                    .await?;
+            if json {
+                print_pretty(&report)?;
+            } else {
+                println!("{}", eval::render_solve_report(&report));
+            }
+            Ok(if report.success {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(2)
+            })
         }
         EvalCommand::Run { task_id, json } => {
             if task_id == "all" {

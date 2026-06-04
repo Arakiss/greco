@@ -15,6 +15,22 @@ pub struct Config {
 }
 
 impl Config {
+    /// Derive a solver config that operates against an isolated workspace copy
+    /// while keeping the same model and credentials. `home` selects which
+    /// harness state the solver loads procedures from (a candidate validation
+    /// sandbox, or the live `.greco`), and `workspace` is the throwaway snapshot
+    /// the solver is allowed to edit.
+    pub fn for_solver(&self, workspace: PathBuf, home: PathBuf) -> Self {
+        Self {
+            provider: self.provider.clone(),
+            model: self.model.clone(),
+            api_key: self.api_key.clone(),
+            api_key_source: self.api_key_source.clone(),
+            home,
+            workspace,
+        }
+    }
+
     pub fn load() -> Result<Self, String> {
         let workspace =
             env::current_dir().map_err(|err| format!("cannot read current dir: {err}"))?;

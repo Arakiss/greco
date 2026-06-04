@@ -21,6 +21,7 @@ Usage:
   greco validate-skill <path> [--json]
   greco eval list [--json]
   greco eval run <task-id|all> [--json]
+  greco eval solve <task-id> [--json]
   greco propose --since <all|24h|7d|30m> [--json]
   greco modification list [--state <proposed|validated|active|rejected|retired|all>] [--json]
   greco modification show <id> [--json] [--diff]
@@ -148,6 +149,7 @@ pub enum ToolCommand {
 pub enum EvalCommand {
     List { json: bool },
     Run { task_id: String, json: bool },
+    Solve { task_id: String, json: bool },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -438,8 +440,12 @@ fn parse_eval(args: &[String]) -> Result<Command, String> {
             task_id: required_arg(args, 1, "task id")?,
             json: args.iter().any(|arg| arg == "--json"),
         })),
+        Some("solve") => Ok(Command::Eval(EvalCommand::Solve {
+            task_id: required_arg(args, 1, "task id")?,
+            json: args.iter().any(|arg| arg == "--json"),
+        })),
         Some(other) => Err(format!("unknown eval command `{other}`")),
-        None => Err("expected `greco eval <list|run>`".to_string()),
+        None => Err("expected `greco eval <list|run|solve>`".to_string()),
     }
 }
 
