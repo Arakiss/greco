@@ -36,6 +36,11 @@ pub struct AuditMetrics {
     pub retracements: u64,
     pub avoidable_prompts: u64,
     pub missing_tool_failures: u64,
+    pub harness_artifacts_available: u64,
+    pub harness_artifacts_loaded: u64,
+    pub harness_activation_failures: u64,
+    pub harness_adherence_checks: u64,
+    pub harness_adherence_misses: u64,
     pub objective_successes: u64,
     pub objective_failures: u64,
 }
@@ -109,6 +114,26 @@ pub fn render_markdown(report: &AuditReport) -> String {
         format!(
             "- Missing-tool failures: {}",
             report.metrics.missing_tool_failures
+        ),
+        format!(
+            "- Harness artifacts available: {}",
+            report.metrics.harness_artifacts_available
+        ),
+        format!(
+            "- Harness artifacts loaded: {}",
+            report.metrics.harness_artifacts_loaded
+        ),
+        format!(
+            "- Harness activation failures: {}",
+            report.metrics.harness_activation_failures
+        ),
+        format!(
+            "- Harness adherence checks: {}",
+            report.metrics.harness_adherence_checks
+        ),
+        format!(
+            "- Harness adherence misses: {}",
+            report.metrics.harness_adherence_misses
         ),
         format!(
             "- Objective successes: {}",
@@ -237,6 +262,11 @@ fn build_window_report_at(
         metrics.retracements += summary.retracements;
         metrics.avoidable_prompts += summary.avoidable_prompts;
         metrics.missing_tool_failures += summary.missing_tool_failures;
+        metrics.harness_artifacts_available += summary.harness_artifacts_available;
+        metrics.harness_artifacts_loaded += summary.harness_artifacts_loaded;
+        metrics.harness_activation_failures += summary.harness_activation_failures;
+        metrics.harness_adherence_checks += summary.harness_adherence_checks;
+        metrics.harness_adherence_misses += summary.harness_adherence_misses;
         if summary.objective_success {
             metrics.objective_successes += 1;
         } else {
@@ -279,6 +309,11 @@ struct SessionSummary {
     retracements: u64,
     avoidable_prompts: u64,
     missing_tool_failures: u64,
+    harness_artifacts_available: u64,
+    harness_artifacts_loaded: u64,
+    harness_activation_failures: u64,
+    harness_adherence_checks: u64,
+    harness_adherence_misses: u64,
     objective_success: bool,
 }
 
@@ -314,8 +349,13 @@ fn read_session_summary(path: &Path) -> Result<Option<SessionSummary>, String> {
     let mut saw_end = false;
 
     for line in content.lines().filter(|line| !line.trim().is_empty()) {
-        let row: Value = serde_json::from_str(line)
-            .map_err(|err| format!("cannot parse trace row in {}: {err}", path.display()))?;
+        // The trace writer appends one JSON object per line without fsync or an
+        // atomic temp-rename, so an interrupted run can leave a truncated final
+        // line. Skip unparseable rows rather than failing the whole audit
+        // window (mirroring the eval-run reader's resilience below).
+        let Ok(row) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
         let event = row.get("event").and_then(Value::as_str).unwrap_or_default();
         let ts = row
             .get("ts_unix_ms")
@@ -353,6 +393,26 @@ fn read_session_summary(path: &Path) -> Result<Option<SessionSummary>, String> {
                     .unwrap_or_default();
                 summary.missing_tool_failures = data
                     .get("missing_tool_failures")
+                    .and_then(Value::as_u64)
+                    .unwrap_or_default();
+                summary.harness_artifacts_available = data
+                    .get("harness_artifacts_available")
+                    .and_then(Value::as_u64)
+                    .unwrap_or_default();
+                summary.harness_artifacts_loaded = data
+                    .get("harness_artifacts_loaded")
+                    .and_then(Value::as_u64)
+                    .unwrap_or_default();
+                summary.harness_activation_failures = data
+                    .get("harness_activation_failures")
+                    .and_then(Value::as_u64)
+                    .unwrap_or_default();
+                summary.harness_adherence_checks = data
+                    .get("harness_adherence_checks")
+                    .and_then(Value::as_u64)
+                    .unwrap_or_default();
+                summary.harness_adherence_misses = data
+                    .get("harness_adherence_misses")
                     .and_then(Value::as_u64)
                     .unwrap_or_default();
                 summary.objective_success = data

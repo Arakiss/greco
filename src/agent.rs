@@ -51,12 +51,25 @@ pub async fn run_agent<P: ModelProvider>(
     let mut input_items = vec![user_message(input)];
     let mut tool_call_count = 0;
     let mut friction = FrictionState::default();
-    let instructions = runtime_instructions(config)?;
+    let runtime = runtime_instructions(config)?;
+    friction.harness_artifacts_available = runtime.harness_artifacts_available;
+    friction.harness_artifacts_loaded = runtime.harness_artifacts_loaded;
+    friction.harness_activation_failures = runtime.harness_activation_failures();
+    trace
+        .record(
+            "harness_context",
+            json!({
+                "active_layer_a_available": runtime.harness_artifacts_available,
+                "active_layer_a_loaded": runtime.harness_artifacts_loaded,
+                "harness_activation_failures": runtime.harness_activation_failures()
+            }),
+        )
+        .await?;
 
     for turn in 1..=options.max_turns {
         let response = provider
             .respond(ModelRequest {
-                instructions: Some(instructions.clone()),
+                instructions: Some(runtime.instructions.clone()),
                 input: input_items.clone(),
                 tools: tools::primitive_tool_specs(),
                 store: false,
@@ -213,16 +226,39 @@ pub async fn run_agent<P: ModelProvider>(
     ))
 }
 
-fn runtime_instructions(config: &Config) -> Result<String, String> {
+#[derive(Debug, Clone)]
+struct RuntimeInstructions {
+    instructions: String,
+    harness_artifacts_available: u64,
+    harness_artifacts_loaded: u64,
+}
+
+impl RuntimeInstructions {
+    fn harness_activation_failures(&self) -> u64 {
+        self.harness_artifacts_available
+            .saturating_sub(self.harness_artifacts_loaded)
+    }
+}
+
+fn runtime_instructions(config: &Config) -> Result<RuntimeInstructions, String> {
+    let active_count = modification::active_layer_a_count(&config.home)? as u64;
     let active = modification::active_layer_a_prompt(&config.home)?;
     if active.trim().is_empty() {
-        Ok(cli::SYSTEM_PROMPT.to_string())
+        Ok(RuntimeInstructions {
+            instructions: cli::SYSTEM_PROMPT.to_string(),
+            harness_artifacts_available: active_count,
+            harness_artifacts_loaded: 0,
+        })
     } else {
-        Ok(format!(
-            "{}\n\n<active_layer_a_procedures>\n{}\n</active_layer_a_procedures>",
-            cli::SYSTEM_PROMPT,
-            active
-        ))
+        Ok(RuntimeInstructions {
+            instructions: format!(
+                "{}\n\n<active_layer_a_procedures>\n{}\n</active_layer_a_procedures>",
+                cli::SYSTEM_PROMPT,
+                active
+            ),
+            harness_artifacts_available: active_count,
+            harness_artifacts_loaded: active_count,
+        })
     }
 }
 
@@ -233,6 +269,17 @@ struct FrictionState {
     retracements: u64,
     avoidable_prompts: u64,
     missing_tool_failures: u64,
+    harness_artifacts_available: u64,
+    harness_artifacts_loaded: u64,
+    harness_activation_failures: u64,
+    // RESERVED, not yet computed. `harness_adherence_misses` is consumed by the
+    // loop gate as a regression signal (loop_control::regression_detected), but
+    // no producer increments these counters yet, so the adherence term is
+    // currently inert (it can never block). Activation is the live harness-
+    // benefit signal today; adherence measurement lands with solver-in-
+    // validation. See docs/architecture/recalibration.md and THREAT_MODEL.md.
+    harness_adherence_checks: u64,
+    harness_adherence_misses: u64,
     seen_tool_calls: BTreeSet<String>,
     seen_errors: BTreeSet<String>,
 }
@@ -255,6 +302,11 @@ async fn record_friction_summary(
                 "retracements": friction.retracements,
                 "avoidable_prompts": friction.avoidable_prompts,
                 "missing_tool_failures": friction.missing_tool_failures,
+                "harness_artifacts_available": friction.harness_artifacts_available,
+                "harness_artifacts_loaded": friction.harness_artifacts_loaded,
+                "harness_activation_failures": friction.harness_activation_failures,
+                "harness_adherence_checks": friction.harness_adherence_checks,
+                "harness_adherence_misses": friction.harness_adherence_misses,
                 "objective_success": objective_success
             }),
         )
@@ -437,6 +489,7 @@ mod tests {
         );
         drop(requests);
         let trace = fs::read_to_string(&outcome.trace_path).unwrap();
+        assert!(trace.contains("\"event\":\"harness_context\""));
         assert!(trace.contains("\"event\":\"friction_summary\""));
         fs::remove_dir_all(workspace).unwrap();
     }
@@ -468,6 +521,11 @@ mod tests {
                 retracements: 0,
                 avoidable_prompts: 0,
                 missing_tool_failures: 0,
+                harness_artifacts_available: 0,
+                harness_artifacts_loaded: 0,
+                harness_activation_failures: 0,
+                harness_adherence_checks: 0,
+                harness_adherence_misses: 0,
             },
             payload: crate::modification::ModificationPayload::CachedProcedure {
                 title: "Reduce high token use".to_string(),
@@ -497,9 +555,24 @@ mod tests {
 
         let instructions = runtime_instructions(&config).unwrap();
 
-        assert!(instructions.contains("<active_layer_a_procedures>"));
-        assert!(instructions.contains("Active procedure: Reduce high token use"));
-        assert!(instructions.contains("Read the smallest authoritative file first."));
+        assert!(
+            instructions
+                .instructions
+                .contains("<active_layer_a_procedures>")
+        );
+        assert_eq!(instructions.harness_artifacts_available, 1);
+        assert_eq!(instructions.harness_artifacts_loaded, 1);
+        assert_eq!(instructions.harness_activation_failures(), 0);
+        assert!(
+            instructions
+                .instructions
+                .contains("Active procedure: Reduce high token use")
+        );
+        assert!(
+            instructions
+                .instructions
+                .contains("Read the smallest authoritative file first.")
+        );
         fs::remove_dir_all(workspace).unwrap();
     }
 

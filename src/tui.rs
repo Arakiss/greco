@@ -30,10 +30,7 @@ pub fn render_snapshot(config: &Config) -> Result<String, String> {
         format!("provider: {} / {}", config.provider, config.model),
         format!("workspace: {}", config.workspace.display()),
         format!("archive: {}", config.home.display()),
-        format!(
-            "credential: {}",
-            config.api_key_source.as_deref().unwrap_or("missing")
-        ),
+        format!("credential: {}", credential_source_label(config)),
         String::new(),
         "catalog".to_string(),
         "-------".to_string(),
@@ -136,6 +133,17 @@ pub fn render_snapshot(config: &Config) -> Result<String, String> {
     ]);
 
     Ok(lines.join("\n"))
+}
+
+fn credential_source_label(config: &Config) -> &'static str {
+    match (config.api_key.is_some(), config.api_key_source.as_deref()) {
+        (false, _) => "missing",
+        (true, Some("environment")) => "present (environment)",
+        (true, Some(source)) if source.contains(".env.local") => "present (local env file)",
+        (true, Some(source)) if source.contains(".config/greco/env") => "present (user env file)",
+        (true, Some(_)) => "present (configured)",
+        (true, None) => "present",
+    }
 }
 
 fn latest_audit(home: &std::path::Path) -> String {

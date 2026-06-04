@@ -204,6 +204,8 @@ pub struct LoopGateSignal {
     pub objective_failures: u64,
     pub repeated_errors: u64,
     pub missing_tool_failures: u64,
+    pub harness_activation_failures: u64,
+    pub harness_adherence_misses: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -403,25 +405,65 @@ pub async fn run(
         }
     };
 
-    let mut validation_runs = Vec::new();
     let validation_started = Instant::now();
     let required_runs = policy.thresholds.validation_runs_required.max(1);
-    for index in 1..=required_runs {
-        let result = modification::validate(home, workspace, &proposed.id).await?;
-        let accepted = result
-            .manifest
-            .validation
-            .as_ref()
-            .is_some_and(|validation| validation.accepted);
-        validation_runs.push(LoopValidationSummary {
-            run_index: index,
-            accepted,
-            result,
-        });
-        if !accepted && policy.budgets.early_stop_on_first_regression {
-            break;
+    let max_wall =
+        std::time::Duration::from_secs(policy.budgets.max_wall_seconds_per_validation.max(1));
+    let runs_future = async {
+        let mut runs = Vec::new();
+        for index in 1..=required_runs {
+            let result = modification::validate(home, workspace, &proposed.id).await?;
+            let accepted = result
+                .manifest
+                .validation
+                .as_ref()
+                .is_some_and(|validation| validation.accepted);
+            runs.push(LoopValidationSummary {
+                run_index: index,
+                accepted,
+                result,
+            });
+            if !accepted && policy.budgets.early_stop_on_first_regression {
+                break;
+            }
         }
-    }
+        Ok::<Vec<LoopValidationSummary>, String>(runs)
+    };
+    let validation_runs = match tokio::time::timeout(max_wall, runs_future).await {
+        Ok(result) => result?,
+        Err(_elapsed) => {
+            // Real-time wall guard: abort a runaway validation instead of only
+            // freezing the next cycle after the time was already spent.
+            let reason = format!(
+                "validation aborted: exceeded max_wall_seconds_per_validation {}s in real time",
+                policy.budgets.max_wall_seconds_per_validation
+            );
+            state.frozen = true;
+            state.freeze_reason = Some(reason.clone());
+            state.validation_wall_ms_used += validation_started.elapsed().as_millis();
+            let decision = push_decision(
+                &mut state,
+                &policy,
+                LoopDecisionKind::FrozenBudget,
+                &options.since,
+                Some(proposed.id.clone()),
+                reason,
+                None,
+            );
+            save_state(home, &state)?;
+            return Ok(report(LoopRunReportDraft {
+                success: false,
+                mode: options.mode,
+                decision,
+                proposed_id: Some(proposed.id),
+                validation_runs: Vec::new(),
+                applied: None,
+                rollback: None,
+                policy,
+                state,
+            }));
+        }
+    };
     let validation_wall_ms = validation_started.elapsed().as_millis();
     state.validation_wall_ms_used += validation_wall_ms;
     let mut comparison = compare_candidate(&audit_report, &validation_runs, &policy.thresholds)?;
@@ -743,6 +785,8 @@ pub fn gate_from_audit(home: &Path, audit_report: &AuditReport) -> Result<LoopGa
         objective_failures: audit_report.metrics.objective_failures,
         repeated_errors: audit_report.metrics.repeated_errors,
         missing_tool_failures: audit_report.metrics.missing_tool_failures,
+        harness_activation_failures: audit_report.metrics.harness_activation_failures,
+        harness_adherence_misses: audit_report.metrics.harness_adherence_misses,
     };
     let budget = budget_snapshot(&state, &policy);
     let (verdict, reason) = gate_verdict(
@@ -927,12 +971,14 @@ pub fn render_gate_report(report: &LoopGateReport) -> String {
         format!("reason: {}", report.reason),
         format!("since: {}", report.since),
         format!(
-            "signal: sessions={} eval_runs={} objective_failures={} repeated_errors={} missing_tool_failures={}",
+            "signal: sessions={} eval_runs={} objective_failures={} repeated_errors={} missing_tool_failures={} harness_activation_failures={} harness_adherence_misses={}",
             report.signal.session_count,
             report.signal.eval_run_count,
             report.signal.objective_failures,
             report.signal.repeated_errors,
-            report.signal.missing_tool_failures
+            report.signal.missing_tool_failures,
+            report.signal.harness_activation_failures,
+            report.signal.harness_adherence_misses
         ),
         format!(
             "decisions: considered={} applied_with_comparison={} kept_pareto={} rejected={} skipped_duplicate={} frozen_budget={} refused_frozen={} rollback={}",
@@ -1046,12 +1092,18 @@ fn gate_verdict(
     if signal.objective_failures > 0
         || signal.repeated_errors > 0
         || signal.missing_tool_failures > 0
+        || signal.harness_activation_failures > 0
+        || signal.harness_adherence_misses > 0
     {
         return (
             LoopGateVerdict::Fail,
             format!(
-                "protected regression signals present: objective_failures={} repeated_errors={} missing_tool_failures={}",
-                signal.objective_failures, signal.repeated_errors, signal.missing_tool_failures
+                "protected regression signals present: objective_failures={} repeated_errors={} missing_tool_failures={} harness_activation_failures={} harness_adherence_misses={}",
+                signal.objective_failures,
+                signal.repeated_errors,
+                signal.missing_tool_failures,
+                signal.harness_activation_failures,
+                signal.harness_adherence_misses
             ),
         );
     }
@@ -1506,14 +1558,18 @@ fn regression_detected(report: &AuditReport) -> bool {
     report.metrics.objective_failures > 0
         || report.metrics.repeated_errors > 0
         || report.metrics.missing_tool_failures > 0
+        || report.metrics.harness_activation_failures > 0
+        || report.metrics.harness_adherence_misses > 0
 }
 
 fn rollback_reason(report: &AuditReport) -> String {
     format!(
-        "audit regression evidence: objective_failures={} repeated_errors={} missing_tool_failures={}",
+        "audit regression evidence: objective_failures={} repeated_errors={} missing_tool_failures={} harness_activation_failures={} harness_adherence_misses={}",
         report.metrics.objective_failures,
         report.metrics.repeated_errors,
-        report.metrics.missing_tool_failures
+        report.metrics.missing_tool_failures,
+        report.metrics.harness_activation_failures,
+        report.metrics.harness_adherence_misses
     )
 }
 

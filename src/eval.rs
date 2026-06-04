@@ -108,7 +108,7 @@ pub async fn run_task(
     let mut criteria = Vec::new();
 
     for criterion in &task.criteria {
-        criteria.push(run_criterion(workspace, criterion).await?);
+        criteria.push(run_criterion(home, workspace, criterion).await?);
     }
 
     let success = criteria.iter().all(|criterion| criterion.success);
@@ -207,6 +207,7 @@ fn load_task_file(path: &Path) -> Result<EvalTask, String> {
 }
 
 async fn run_criterion(
+    home: &Path,
     workspace: &Path,
     criterion: &EvalCriterion,
 ) -> Result<EvalCriterionReport, String> {
@@ -215,6 +216,9 @@ async fn run_criterion(
         .arg("-c")
         .arg(&criterion.command)
         .current_dir(workspace)
+        .env_clear()
+        .envs(crate::tools::sandbox_env())
+        .env("GRECO_HOME", home)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -367,6 +371,34 @@ mod tests {
         assert!(report.run_path.unwrap().exists());
         fs::remove_dir_all(home).unwrap();
         fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[tokio::test]
+    async fn criterion_runs_with_cleared_environment() {
+        let home = temp_dir("eval-envclear-home");
+        let workspace = temp_dir("eval-envclear-ws");
+        fs::create_dir_all(&home).unwrap();
+        fs::create_dir_all(&workspace).unwrap();
+
+        // env_clear contract: non-allowlisted parent variables (cargo sets
+        // CARGO_PKG_NAME for the test process) must not reach the criterion,
+        // while GRECO_HOME must. The probe can never fail spuriously: if the
+        // variable is absent it reads CLEARED too; it only fails on a real leak.
+        let criterion = EvalCriterion {
+            id: "env".to_string(),
+            command: "test \"${CARGO_PKG_NAME:-CLEARED}\" = CLEARED && test -n \"$GRECO_HOME\""
+                .to_string(),
+            timeout_seconds: 5,
+        };
+        let report = run_criterion(&home, &workspace, &criterion).await.unwrap();
+        assert!(
+            report.success,
+            "criterion env not scrubbed or GRECO_HOME missing: {}",
+            report.output
+        );
+
+        fs::remove_dir_all(&home).unwrap();
+        fs::remove_dir_all(&workspace).unwrap();
     }
 
     fn temp_dir(label: &str) -> PathBuf {

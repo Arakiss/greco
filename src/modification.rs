@@ -56,6 +56,16 @@ pub struct FrictionSource {
     pub retracements: u64,
     pub avoidable_prompts: u64,
     pub missing_tool_failures: u64,
+    #[serde(default)]
+    pub harness_artifacts_available: u64,
+    #[serde(default)]
+    pub harness_artifacts_loaded: u64,
+    #[serde(default)]
+    pub harness_activation_failures: u64,
+    #[serde(default)]
+    pub harness_adherence_checks: u64,
+    #[serde(default)]
+    pub harness_adherence_misses: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -144,6 +154,11 @@ pub fn propose_from_audit(home: &Path, report: &AuditReport) -> Result<ProposalR
         retracements: report.metrics.retracements,
         avoidable_prompts: report.metrics.avoidable_prompts,
         missing_tool_failures: report.metrics.missing_tool_failures,
+        harness_artifacts_available: report.metrics.harness_artifacts_available,
+        harness_artifacts_loaded: report.metrics.harness_artifacts_loaded,
+        harness_activation_failures: report.metrics.harness_activation_failures,
+        harness_adherence_checks: report.metrics.harness_adherence_checks,
+        harness_adherence_misses: report.metrics.harness_adherence_misses,
     };
     let id = format!("layer-a-{}-{}", source.dominant_signal, now_millis());
     let manifest = ModificationManifest {
@@ -236,10 +251,11 @@ pub async fn validate(home: &Path, workspace: &Path, id: &str) -> Result<Lifecyc
     if tasks.is_empty() {
         return Err("cannot validate modification without eval tasks".to_string());
     }
+    let validation_home = create_validation_sandbox(home, &manifest)?;
     let mut eval_runs = Vec::new();
     let mut accepted = true;
     for task in tasks {
-        let report = eval::run_task(home, workspace, &task.id).await?;
+        let report = eval::run_task(&validation_home, workspace, &task.id).await?;
         accepted &= report.success;
         if let Some(path) = report.run_path {
             eval_runs.push(path);
@@ -270,6 +286,81 @@ pub async fn validate(home: &Path, workspace: &Path, id: &str) -> Result<Lifecyc
         path: new_path,
         manifest,
     })
+}
+
+fn create_validation_sandbox(
+    home: &Path,
+    manifest: &ModificationManifest,
+) -> Result<PathBuf, String> {
+    let sandbox = home
+        .join("state")
+        .join("validation-sandboxes")
+        .join(format!(
+            "{}-{}",
+            sanitize_file_name(&manifest.id),
+            now_millis()
+        ));
+    fs::create_dir_all(&sandbox)
+        .map_err(|err| format!("cannot create validation sandbox: {err}"))?;
+
+    let eval_source = home.join("eval");
+    if eval_source.exists() {
+        copy_dir(&eval_source, &sandbox.join("eval"))?;
+    }
+
+    let active_source = state_dir(home, &ModificationState::Active);
+    if active_source.exists() {
+        copy_dir(
+            &active_source,
+            &sandbox.join("modifications").join("active"),
+        )?;
+    }
+
+    let mut candidate = manifest.clone();
+    candidate.state = ModificationState::Active;
+    candidate.applied_at_unix_ms = Some(now_millis());
+    candidate.rollback = Some(RollbackMetadata {
+        previous_state: manifest.state.clone(),
+        activated_prompt_chars: match &manifest.payload {
+            ModificationPayload::CachedProcedure { body, .. } => body.chars().count(),
+            ModificationPayload::SubagentPrompt { body, .. } => body.chars().count(),
+        },
+        note: "validation sandbox activated candidate without touching live state".to_string(),
+    });
+    write_manifest_dir(
+        &sandbox
+            .join("modifications")
+            .join("active")
+            .join(&candidate.id),
+        &candidate,
+    )?;
+
+    Ok(sandbox)
+}
+
+fn copy_dir(source: &Path, destination: &Path) -> Result<(), String> {
+    fs::create_dir_all(destination).map_err(|err| {
+        format!(
+            "cannot create copied directory {}: {err}",
+            destination.display()
+        )
+    })?;
+    for entry in fs::read_dir(source)
+        .map_err(|err| format!("cannot read directory {}: {err}", source.display()))?
+    {
+        let entry = entry.map_err(|err| format!("cannot read directory entry: {err}"))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|err| format!("cannot read directory entry type: {err}"))?;
+        let target = destination.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir(&entry.path(), &target)?;
+        } else if file_type.is_file() {
+            fs::copy(entry.path(), &target)
+                .map_err(|err| format!("cannot copy file {}: {err}", target.display()))?;
+        }
+    }
+    Ok(())
 }
 
 pub fn apply(home: &Path, id: &str) -> Result<LifecycleResult, String> {
@@ -390,6 +481,17 @@ pub fn active_layer_a_prompt(home: &Path) -> Result<String, String> {
     Ok(blocks.join("\n\n"))
 }
 
+pub fn active_layer_a_count(home: &Path) -> Result<usize, String> {
+    let mut count = 0;
+    for entry in list_entries(home, ModificationState::Active)? {
+        let (_, manifest) = read_by_id(home, &entry.id)?;
+        if manifest.layer == ModificationLayer::A {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
 pub fn find_equivalent_in_states(
     home: &Path,
     manifest: &ModificationManifest,
@@ -483,6 +585,10 @@ fn dominant_signal(report: &AuditReport) -> String {
         "retracements".to_string()
     } else if metrics.missing_tool_failures > 0 {
         "missing-tool-failures".to_string()
+    } else if metrics.harness_activation_failures > 0 {
+        "harness-activation-failures".to_string()
+    } else if metrics.harness_adherence_misses > 0 {
+        "harness-adherence-misses".to_string()
     } else if report.session_count > 0 && metrics.tokens / report.session_count as u64 > 2_000 {
         "high-token-use".to_string()
     } else {
@@ -515,12 +621,28 @@ fn move_with_manifest(
 ) -> Result<PathBuf, String> {
     let new_path = state_dir(home, &manifest.state).join(&manifest.id);
     if new_path != old_path {
-        if new_path.exists() {
-            fs::remove_dir_all(&new_path)
-                .map_err(|err| format!("cannot replace existing modification state: {err}"))?;
-        }
-        fs::create_dir_all(new_path.parent().unwrap())
+        let parent = new_path
+            .parent()
+            .ok_or_else(|| "modification state path has no parent".to_string())?;
+        fs::create_dir_all(parent)
             .map_err(|err| format!("cannot create modification state dir: {err}"))?;
+        if new_path.exists() {
+            // Preserve the no-deletion invariant: a colliding destination is
+            // retired (moved aside), never removed, so the archive stays a
+            // complete memory substrate.
+            let retired = state_dir(home, &ModificationState::Retired).join(format!(
+                "{}-superseded-{}",
+                manifest.id,
+                now_millis()
+            ));
+            let retired_parent = retired
+                .parent()
+                .ok_or_else(|| "retired state path has no parent".to_string())?;
+            fs::create_dir_all(retired_parent)
+                .map_err(|err| format!("cannot create retired modification dir: {err}"))?;
+            fs::rename(&new_path, &retired)
+                .map_err(|err| format!("cannot retire superseded modification: {err}"))?;
+        }
         fs::rename(&old_path, &new_path)
             .map_err(|err| format!("cannot move modification state: {err}"))?;
     }
@@ -549,6 +671,19 @@ fn state_dir(home: &Path, state: &ModificationState) -> PathBuf {
     })
 }
 
+fn sanitize_file_name(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
 fn all_states() -> [ModificationState; 5] {
     [
         ModificationState::Proposed,
@@ -571,6 +706,44 @@ mod tests {
     use std::fs;
 
     use super::*;
+
+    #[tokio::test]
+    async fn validation_runs_against_candidate_sandbox() {
+        let root = temp_dir("mod-validation-sandbox");
+        let home = root.join(".greco");
+        let eval_task = home.join("eval").join("candidate-active");
+        fs::create_dir_all(&eval_task).unwrap();
+        fs::write(
+            eval_task.join("task.json"),
+            r#"{"id":"candidate-active","title":"Candidate active","kind":"proof","prompt":"Proof","criteria":[{"id":"candidate-active","command":"find \"$GRECO_HOME/modifications/active\" -name manifest.json -print 2>/dev/null | grep -q '/layer-a-'","timeout_seconds":5}]}"#,
+        )
+        .unwrap();
+        let report = AuditReport {
+            generated_at_unix_ms: now_millis(),
+            since: "all".to_string(),
+            session_count: 1,
+            eval_run_count: 1,
+            metrics: crate::audit::AuditMetrics {
+                tokens: 9_000,
+                ..Default::default()
+            },
+            eval_runs: Vec::new(),
+            modifications: Default::default(),
+            loop_state: None,
+            signal_assessment: "proof signal".to_string(),
+            report_paths: None,
+        };
+
+        let proposed = propose_from_audit(&home, &report).unwrap();
+        let validated = validate(&home, &root, &proposed.id).await.unwrap();
+        let eval_runs = validated.manifest.validation.unwrap().eval_runs;
+
+        assert_eq!(validated.to, ModificationState::Validated);
+        assert_eq!(eval_runs.len(), 1);
+        assert!(eval_runs[0].starts_with(home.join("state").join("validation-sandboxes")));
+        assert!(!home.join("modifications").join("active").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[tokio::test]
     async fn validates_applies_reverts_and_reapplies_layer_a() {
