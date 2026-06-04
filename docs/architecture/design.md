@@ -4,7 +4,7 @@
 
 Greco is a terminal-first Rust coding-agent harness whose evolutionary unit is the harness itself. The model is not retrained. The agent observes its own use through session traces, proposes targeted modifications to the harness or its subagents, validates them empirically against an operator-defined evaluation suite within strict budgets, and applies or discards them autonomously. The operator does not approve per-proposal changes; the operator designs the experiment and audits aggregate behavior on a cadence.
 
-The original v0.1-v0.3-alpha cycle implemented a skill catalog and proved its loop closes. The current axis supersedes that work.
+The original v0.1-v0.3-alpha cycle implemented a skill catalog and proved its loop closes. The current axis supersedes that work. The harness-benefit finding in arXiv:2605.30621 refines the current axis: proposal/evolver capability should be cheap and swappable, while solver selection and suite design must measure whether the solver activates and follows the updated harness.
 
 ## Architecture
 
@@ -24,7 +24,8 @@ greco
   harness          loadable harness state: system prompt, tools, settings, hooks
 
 .greco/
-  catalog/         modification archive with lineage
+  modifications/   typed modification archive with lineage (proposed/validated/active/rejected/retired)
+  catalog/         historical alpha *skill* archive (separate from modifications/)
   traces/          session, proposal, validation, audit JSONL
   eval/            suite definitions (read-only for the agent)
   state/           applied modifications, current harness checkpoint
@@ -95,6 +96,11 @@ Friction signals are extracted from traces by deterministic instrumentation, not
 | `retracements` | Edits or actions undone within same session | Lower is better |
 | `avoidable_prompts` | Permission prompts on recurring patterns | Lower is better |
 | `missing_tool_failures` | Sequences of primitives that suggest a missing composite | Lower is better |
+| `harness_artifacts_available` | Harness artifacts made available to a session or task | Informational denominator |
+| `harness_artifacts_loaded` | Available artifacts actually loaded into working context | Higher is better |
+| `harness_activation_failures` | Available artifacts not loaded into working context | Lower is better |
+| `harness_adherence_checks` | Deterministic procedure checkpoints declared by tasks or probes | Informational denominator |
+| `harness_adherence_misses` | Declared checkpoints not supported by trace, command, file, or diff evidence | Lower is better |
 | `objective_success` | Pass/fail of the task's declared criterion | Higher is better |
 
 A modification must reduce one or more of these without regressing any of them beyond a declared tolerance. The system maintains a Pareto frontier when modifications trade off against each other, after GEPA's pattern.
@@ -134,6 +140,12 @@ Each suite entry is:
 Criteria support at least `command` (run a command, expect exit code), `file_match` (file exists and matches a pattern), and `composite` (all of a list pass). The criterion is the only ground truth; the model's claim of success is irrelevant.
 
 Suite size target: 5 to 15 tasks. Smaller is fine if representative. Larger inflates validation cost without proportional signal.
+
+### Candidate Validation Sandboxes
+
+Validation does not run the suite against the live harness home. For each validation pass, Greco creates a temporary validation home under `.greco/state/validation-sandboxes/<candidate-id>-<timestamp>/`, copies the read-only suite into it, copies the current active modification state, activates the candidate inside that sandbox, and runs criteria with `GRECO_HOME` pointing at the sandbox.
+
+This is the minimum condition for a comparative claim to be meaningful. A candidate that is not visible to the suite has not been validated; it has only been archived. The live home is changed only after the candidate passes the required validation runs and the comparison threshold admits application.
 
 ## Budgets
 
@@ -176,7 +188,7 @@ session
   -> operator can rollback to any prior checkpoint
 ```
 
-States in `.greco/catalog/`:
+States in `.greco/modifications/`:
 
 - `proposed/` — candidate, not yet validated.
 - `validated/` — passed validation, awaiting application or escalation.
@@ -258,6 +270,7 @@ trait ModelProvider {
 - `OpenAiProvider` is the only implementation.
 - Default model is `gpt-5.4`.
 - Validation runs use the same provider and respect declared budgets.
+- Local models are evaluated outside the active harness until they prove harness-benefit behavior. MLX belongs in a lab adapter first, not in the core provider boundary.
 - The core harness sees normalized text, tool calls, usage, and raw output items for stateless reasoning replay.
 
 ## Primitive Tools

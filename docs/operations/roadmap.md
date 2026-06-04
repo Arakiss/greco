@@ -82,6 +82,14 @@ Decision gate: one audit window of autonomous operation shows measurable aggrega
 - Gate evidence summarizes decisions by kind, comparison outcomes, budget consumption, protected regression signals, active duplicate health, and the best primary metric delta.
 - The gate does not pass from wall-time-only Pareto movement; it requires applied comparative evidence with primary-metric improvement.
 
+### Current unversioned — Harness-benefit correction
+
+- Document the arXiv:2605.30621 correction: separate cheap evolver work from solver harness-benefit.
+- Add activation and adherence signal fields to traces, audit reports, modification friction sources, and the Phase 3 gate.
+- Restore the missing recalibration document cited by the agent contract.
+- Run candidate validation in sandbox homes with the proposed modification activated before admission.
+- Keep MLX and local open-weight solver work isolated in a local model lab until candidates pass activation, adherence, objective-success, and operator-cost checks.
+
 ### Later alpha — Higher layers under audit (Phase 4)
 
 - Layers B, C, S2, S3 autonomous within stricter thresholds.

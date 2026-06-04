@@ -80,8 +80,8 @@ A reverted modification leaves side effects outside the checkpoint (artifacts wr
 Mitigation:
 
 - Modifications must be expressible as typed diffs (add tool, edit prompt, edit setting, add subagent). Free-form patches forbidden.
-- Validation occurs in temp directories, never in the live workspace.
-- Checkpoint restore validates post-state against the recorded baseline and aborts if there is residue.
+- Validation sandboxes the harness state (`.greco`) in a temp directory, so a candidate never mutates live harness state. **Known gap:** eval *criterion commands* still run with the live workspace as their working directory. They are operator-authored and now run with `env_clear` plus a bounded timeout, but isolating the workspace tree itself is tracked together with the solver-in-validation work (see `docs/architecture/recalibration.md`).
+- Checkpoint restore is a single-command revert. **Known gap:** post-state residue validation against the recorded baseline is not yet enforced; revert currently retires the last applied Layer A/S1 procedure and freezes.
 
 ### Cascade attack
 
