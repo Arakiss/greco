@@ -90,6 +90,7 @@ Recalibrated commands (Phase 1+):
 ```sh
 greco eval list
 greco eval run <task-id|all>
+greco eval solve <task-id>
 greco audit --since <window>
 greco propose --since <window>
 greco modification list --state <state>
@@ -306,7 +307,9 @@ Implemented recalibrated modules: `eval`, `audit`, `modification`. Later modules
 
 The roadmap declares explicit decision gates at the end of Phase 1, Phase 2, and Phase 3. Each gate has a structural failure mode (noisy friction signals, junk proposals, no measurable aggregate improvement). Failing any gate triggers an honest closure with a final `What I learned` document. The point of the recalibration is not to extend the project at any cost. It is to give the project a thesis that can actually be tested.
 
-**Open structural gap (the load-bearing one).** Validation currently runs only the operator's deterministic eval *criteria*; it does not yet run the *solver* (the model) on each task with and without the candidate procedure. A Layer A modification only affects behavior through the model's runtime prompt, which the criteria never exercise, so `primary_improvement` is structurally pinned at `0ppm` and the Phase 3 gate reports `NeedsMoreData` by construction — not by accident. The governance machinery around the experiment (typed layers, budgets, freeze, rollback, comparison, gate) is real and exercised; the measurement at its center is not yet wired to the quantity the thesis is about. Closing this — running `run_agent` inside validation against an isolated workspace copy — is the next decision, and it is what makes a Phase 3 `Pass` reachable at all.
+**Open structural gap (the load-bearing one).** The autonomous loop's validation still runs only the operator's deterministic eval *criteria*. A Layer A modification only affects behavior through the model's runtime prompt, which those criteria never exercise, so `primary_improvement` inside `greco loop run` is structurally pinned at `0ppm` and the Phase 3 gate reports `NeedsMoreData` by construction — not by accident.
+
+`greco eval solve <task>` closes the first half of this gap: it snapshots the workspace into an isolated copy, runs the model (`run_agent`) on the task with the harness state active, and grades the copy with the task criteria — so the solver is finally in the loop and its work is measured. What remains is to run `eval solve` twice inside autonomous validation (baseline with no candidate vs candidate active), feed the real delta into the existing comparison, and make a Phase 3 `Pass` gate autonomous `--apply`. Until that wiring lands, the governance machinery (typed layers, budgets, freeze, rollback, comparison, gate) is real and exercised, but the autonomous loop's central measurement is not yet the quantity the thesis is about.
 
 ## Status Summary
 
