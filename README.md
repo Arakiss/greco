@@ -9,16 +9,38 @@
   <a href="https://github.com/Arakiss/greco/actions/workflows/ci.yml"><img src="https://github.com/Arakiss/greco/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="rust-toolchain.toml"><img src="https://img.shields.io/badge/rust-1.90%2B-orange.svg" alt="Rust 1.90+"></a>
-  <a href="docs/architecture/design.md"><img src="https://img.shields.io/badge/status-recalibrated--alpha-blue.svg" alt="Recalibrated alpha"></a>
+  <a href="docs/architecture/design.md"><img src="https://img.shields.io/badge/status-experimental%20alpha-orange.svg" alt="Experimental alpha"></a>
 </p>
 
 # Greco
 
-> A Rust coding-agent harness that observes its own use and improves itself, within budgets and a suite the operator defines.
+> An experiment in whether a coding-agent harness can measurably improve itself — built in the open, and candid about what is proven and what is not.
 
-**Development status: recalibrated alpha.** The original alpha cycle (`0.1.0-alpha.1` through `0.3.0-alpha.1`) explored a skill-catalog evolutionary axis. After the loop closed, a critical review concluded the axis was self-referential and did not test the deeper aspiration of the project. The axis was replaced at `0.4.0-alpha.1`; `0.5.0-alpha.1` adds the first manual, reversible modification lifecycle; `0.6.0-alpha.1` adds the first bounded autonomous loop for Layer A/S1; `0.6.1-alpha.1` makes promotion depend on stored comparative evidence instead of pass/fail validation alone; `0.7.0-alpha.1` adds the deterministic Phase 3 gate command. Current work incorporates the harness-benefit correction from arXiv:2605.30621: keep the evolver cheap, measure whether the solver activates and follows the harness, and evaluate local open-weight solvers in an isolated MLX lab before touching the core runtime. The skill code is preserved as historical scaffolding.
+## Status: an early experiment, not a product
 
-Greco's evolutionary unit is the *harness modification*: a typed, layered, reversible change to the control plane around a frozen model. Session traces reveal friction. The agent proposes modifications. Modifications are validated empirically against an operator-defined evaluation suite within strict budgets. Modifications that meet thresholds are applied autonomously. The operator does not approve per proposal; the operator designs the experiment and audits aggregate behavior on a cadence.
+Greco is embryonic: a single-operator research project in alpha, not a tool to adopt. The thesis below is under test, and the project is built to be **declared false** if the evidence does not hold (see [Honest Closure](#honest-closure)). What works today runs locally and is covered by tests; what does not work yet is named plainly throughout this README instead of implied.
+
+If you came looking for a self-improving agent to use, this is not that yet. If you came to follow — or pull apart — an attempt to turn "the harness improves itself" into a claim that can actually be tested, that is what this is.
+
+It has already corrected course once. The first alpha cycle (`0.1.0`–`0.3.0`) evolved a skill catalog; a critical review found that axis self-referential and it was replaced at `0.4.0`. The unit of evolution now is the *harness modification*: a typed, layered, reversible change to the control plane around a frozen model. Session traces reveal friction, the agent proposes a modification, it is validated against an operator-defined evaluation suite within strict budgets, and modifications that clear the thresholds apply autonomously. The operator does not approve each proposal; the operator designs the experiment and audits aggregate behavior on a cadence.
+
+## What's Real, What's Not Yet
+
+Working and tested today:
+
+- A coding-agent loop over OpenAI `gpt-5.4` (Responses API) with read/write/edit/bash tools, confined to the workspace and run with a credential-scrubbed environment.
+- Deterministic friction signals computed from session traces and aggregated by `greco audit` — counters, not model-judged scores.
+- A typed, layered, reversible modification lifecycle (`proposed → validated → active → rejected → retired`) in which no artifact is ever deleted.
+- A bounded autonomous loop with budgets, freeze, one-command rollback, a baseline-vs-candidate comparison delta, and a deterministic Phase 3 acceptance gate.
+- `greco eval solve`: the model attempts a task inside an isolated workspace snapshot and is graded by the operator's criteria, with the live workspace left untouched.
+
+Not yet — and called out wherever it matters below:
+
+- The *autonomous loop's* validation does not yet run the solver, so its `primary_improvement` is pinned at `0ppm` and the Phase 3 gate cannot return `Pass`. Wiring `eval solve` into the loop as a baseline-vs-candidate run is the next step, and the one that makes the thesis testable end to end.
+- Only modification layers `A` (cached procedure) and `S1` (subagent prompt) are implemented; `B`–`E` and `S2`–`S3` are roadmap. The type for a layer cannot even represent a Layer E change, which is what makes one impossible to apply autonomously.
+- No MCP, no web UI, no hosted service, no model fine-tuning.
+
+The governance machinery is built and exercised; the experiment's central measurement is half-wired. Closing that gap is the next phase, not a footnote.
 
 ## Where It Fits
 
