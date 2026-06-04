@@ -1,63 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 420" role="img" aria-labelledby="t d">
-  <title id="t">Greco — an experiment in a self-improving coding-agent harness</title>
-  <desc id="d">The wordmark "greco" with a minimal clay loop of the modification lifecycle: observe, validate, apply, audit.</desc>
+  <title id="t">Greco</title>
+  <desc id="d">The greco wordmark beside a fixed core (a frozen model) inside a flowing clay ring (the evolving harness).</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0.85" y2="1">
       <stop offset="0" stop-color="#17120f"/>
       <stop offset="1" stop-color="#221b16"/>
     </linearGradient>
     <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0" stop-color="#d97757" stop-opacity="0.18"/>
+      <stop offset="0" stop-color="#d97757" stop-opacity="0.16"/>
       <stop offset="1" stop-color="#d97757" stop-opacity="0"/>
     </radialGradient>
   </defs>
 
   <rect width="1400" height="420" fill="url(#bg)"/>
-  <circle cx="1180" cy="210" r="250" fill="url(#glow)"/>
+  <circle cx="1115" cy="210" r="250" fill="url(#glow)"/>
   <rect x="0" y="0" width="1400" height="3" fill="#d97757" opacity="0.9"/>
 
-  <!-- wordmark + copy -->
-  <g transform="translate(108 0)" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
-    <text x="2" y="138" font-size="19" letter-spacing="5" fill="#9a8c82">THE HARNESS IS THE UNIT OF EVOLUTION</text>
-    <text x="-3" y="252" font-family="Georgia, 'Iowan Old Style', 'Times New Roman', serif" font-size="148" font-weight="600" letter-spacing="-3" fill="#f3ece4">greco</text>
-    <rect x="3" y="274" width="116" height="6" rx="3" fill="#d97757"/>
-    <text x="4" y="320" font-size="19" fill="#cabeb2">an experiment: can a coding-agent harness improve itself, on evidence?</text>
-    <g transform="translate(4 344)" font-size="15" fill="#9a8c82">
-      <rect x="0" y="0" width="470" height="30" rx="15" fill="none" stroke="#3c322b" stroke-width="1.5"/>
-      <circle cx="22" cy="15" r="4" fill="#d97757"/>
-      <text x="40" y="20">experimental alpha / single-operator / frozen model / rust</text>
-    </g>
+  <!-- wordmark -->
+  <g transform="translate(150 0)">
+    <text x="0" y="262" font-family="Georgia, 'Iowan Old Style', 'Times New Roman', serif" font-size="172" font-weight="600" letter-spacing="-4" fill="#f3ece4">greco</text>
+    <rect x="6" y="292" width="132" height="6" rx="3" fill="#d97757"/>
   </g>
 
-  <!-- modification-lifecycle loop -->
-  <g transform="translate(1180 210)" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
-    <circle r="110" fill="none" stroke="#d97757" stroke-width="2.5" opacity="0.9"/>
-    <circle r="6" fill="none" stroke="#5b4a3f" stroke-width="1.5"/>
-    <circle r="2.5" fill="#d97757"/>
+  <!-- motif: a frozen core inside an evolving harness -->
+  <g transform="translate(1115 210)">
 
-    <!-- clockwise flow cue -->
-    <polygon points="86,-69 70,-76 80,-86" fill="#d97757"/>
-
-    <!-- nodes -->
+    <!-- evolving harness: a flowing clay ring -->
+    <circle r="118" fill="none" stroke="#d97757" stroke-width="2.5" opacity="0.92"/>
+    <!-- clockwise flow cue at the top -->
+    <polygon points="11,-118 -4,-124 -4,-112" fill="#d97757"/>
+    <!-- a few nodes where the harness changes -->
     <g fill="#221b16" stroke="#d97757" stroke-width="2.5">
-      <circle cx="0" cy="-110" r="9"/>
-      <circle cx="110" cy="0" r="9"/>
-      <circle cx="0" cy="110" r="9"/>
-      <circle cx="-110" cy="0" r="9"/>
+      <circle cx="59" cy="102.2" r="7"/>
+      <circle cx="-118" cy="0" r="7"/>
+      <circle cx="59" cy="-102.2" r="7"/>
     </g>
 
-    <!-- labels -->
-    <g fill="#cabeb2" font-size="17">
-      <text x="0" y="-128" text-anchor="middle">observe</text>
-      <text x="128" y="5" text-anchor="start">validate</text>
-      <text x="0" y="138" text-anchor="middle">apply</text>
-      <text x="-128" y="5" text-anchor="end">audit</text>
+    <!-- frozen core: a static, muted chip with a fixed clay center -->
+    <g stroke="#71604f" stroke-width="2" fill="none" stroke-linejoin="round">
+      <rect x="-34" y="-34" width="68" height="68" rx="11"/>
+      <rect x="-17" y="-17" width="34" height="34" rx="5"/>
     </g>
-    <g fill="#8a7d72" font-size="12">
-      <text x="0" y="-110" text-anchor="middle" dy="28">traces</text>
-      <text x="110" y="0" text-anchor="middle" dy="30">suite + budget</text>
-      <text x="0" y="110" text-anchor="middle" dy="-20">if measured better</text>
-      <text x="-110" y="0" text-anchor="middle" dy="32">on cadence</text>
+    <g stroke="#71604f" stroke-width="2" stroke-linecap="round">
+      <path d="M-14 -34 V-44 M0 -34 V-44 M14 -34 V-44"/>
+      <path d="M-14 34 V44 M0 34 V44 M14 34 V44"/>
+      <path d="M-34 -14 H-44 M-34 0 H-44 M-34 14 H-44"/>
+      <path d="M34 -14 H44 M34 0 H44 M34 14 H44"/>
     </g>
+    <rect x="-5" y="-5" width="10" height="10" rx="2.5" fill="#d97757"/>
   </g>
 </svg>
