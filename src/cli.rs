@@ -26,6 +26,7 @@ Usage:
   greco modification list [--state <proposed|validated|active|rejected|retired|all>] [--json]
   greco modification show <id> [--json] [--diff]
   greco modification validate <id> [--json]
+  greco modification compare <id> [--json]
   greco modification apply <id> [--json]
   greco modification revert <id> [--json]
   greco loop run --since <all|24h|7d|30m> [--dry-run|--apply] [--json]
@@ -179,6 +180,10 @@ pub enum ModificationCommand {
         id: String,
         json: bool,
     },
+    Compare {
+        id: String,
+        json: bool,
+    },
     Apply {
         id: String,
         json: bool,
@@ -296,6 +301,10 @@ fn parse_modification(args: &[String]) -> Result<Command, String> {
             id: required_arg(args, 1, "modification id")?,
             json: args.iter().any(|arg| arg == "--json"),
         })),
+        Some("compare") => Ok(Command::Modification(ModificationCommand::Compare {
+            id: required_arg(args, 1, "modification id")?,
+            json: args.iter().any(|arg| arg == "--json"),
+        })),
         Some("apply") => Ok(Command::Modification(ModificationCommand::Apply {
             id: required_arg(args, 1, "modification id")?,
             json: args.iter().any(|arg| arg == "--json"),
@@ -305,7 +314,9 @@ fn parse_modification(args: &[String]) -> Result<Command, String> {
             json: args.iter().any(|arg| arg == "--json"),
         })),
         Some(other) => Err(format!("unknown modification command `{other}`")),
-        None => Err("expected `greco modification <list|show|validate|apply|revert>`".to_string()),
+        None => Err(
+            "expected `greco modification <list|show|validate|compare|apply|revert>`".to_string(),
+        ),
     }
 }
 

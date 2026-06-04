@@ -308,6 +308,30 @@ async fn handle_modification(
                 },
             )
         }
+        ModificationCommand::Compare { id, json } => {
+            let api_key = config.api_key.clone().ok_or_else(|| {
+                "OPENAI_API_KEY is missing; copy .env.example to .env.local".to_string()
+            })?;
+            let provider = OpenAiProvider::new(api_key, config.model.clone());
+            let report = modification::solver_compare(
+                &config.home,
+                &config.workspace,
+                &id,
+                config,
+                &provider,
+            )
+            .await?;
+            if json {
+                print_pretty(&report)?;
+            } else {
+                println!("{}", modification::render_solver_comparison(&report));
+            }
+            Ok(if report.primary_improvement_ppm > 0 {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(2)
+            })
+        }
         ModificationCommand::Apply { id, json } => {
             let result = modification::apply(&config.home, &id)?;
             print_lifecycle_result(json, &result)?;

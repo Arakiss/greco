@@ -7,7 +7,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::{audit::AuditReport, eval};
+use crate::{audit::AuditReport, config::Config, eval, provider::ModelProvider};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ModificationManifest {
@@ -286,6 +286,95 @@ pub async fn validate(home: &Path, workspace: &Path, id: &str) -> Result<Lifecyc
         path: new_path,
         manifest,
     })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SolverTaskDelta {
+    pub task_id: String,
+    pub baseline_success: bool,
+    pub candidate_success: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SolverComparison {
+    pub modification_id: String,
+    pub tasks: Vec<SolverTaskDelta>,
+    pub baseline_success_ppm: u64,
+    pub candidate_success_ppm: u64,
+    pub primary_improvement_ppm: i64,
+}
+
+/// Measure a candidate's *marginal* effect by running the solver on every eval
+/// task twice: once against the live harness (baseline) and once against the
+/// candidate sandbox where the proposed procedure is active. The delta in
+/// objective success is the quantity the deterministic criteria can never
+/// produce on their own, because only the candidate run carries the procedure
+/// in the model's prompt. This is the measurement the Phase 3 gate needs and the
+/// building block the autonomous loop will call once `--apply` is gated on it.
+pub async fn solver_compare(
+    home: &Path,
+    workspace: &Path,
+    id: &str,
+    base_config: &Config,
+    provider: &dyn ModelProvider,
+) -> Result<SolverComparison, String> {
+    let (_, manifest) = read_by_id(home, id)?;
+    let candidate_home = create_validation_sandbox(home, &manifest)?;
+    let tasks = eval::list_tasks(home)?;
+    if tasks.is_empty() {
+        return Err("cannot compare without eval tasks".to_string());
+    }
+
+    let mut deltas = Vec::new();
+    let (mut baseline_hits, mut candidate_hits) = (0u64, 0u64);
+    for task in &tasks {
+        // baseline: the live harness, candidate not active
+        let baseline = eval::solve_task(home, workspace, base_config, provider, &task.id).await?;
+        // candidate: the sandbox where the proposed procedure is active
+        let candidate =
+            eval::solve_task(&candidate_home, workspace, base_config, provider, &task.id).await?;
+        if baseline.success {
+            baseline_hits += 1;
+        }
+        if candidate.success {
+            candidate_hits += 1;
+        }
+        deltas.push(SolverTaskDelta {
+            task_id: task.id.clone(),
+            baseline_success: baseline.success,
+            candidate_success: candidate.success,
+        });
+    }
+
+    let n = tasks.len() as u64;
+    let baseline_success_ppm = baseline_hits * 1_000_000 / n;
+    let candidate_success_ppm = candidate_hits * 1_000_000 / n;
+    Ok(SolverComparison {
+        modification_id: id.to_string(),
+        tasks: deltas,
+        baseline_success_ppm,
+        candidate_success_ppm,
+        primary_improvement_ppm: candidate_success_ppm as i64 - baseline_success_ppm as i64,
+    })
+}
+
+pub fn render_solver_comparison(report: &SolverComparison) -> String {
+    let mut lines = vec![
+        format!("solver comparison for {}", report.modification_id),
+        format!(
+            "baseline_success_ppm={} candidate_success_ppm={} primary_improvement_ppm={}",
+            report.baseline_success_ppm,
+            report.candidate_success_ppm,
+            report.primary_improvement_ppm
+        ),
+    ];
+    for delta in &report.tasks {
+        lines.push(format!(
+            "- {} baseline={} candidate={}",
+            delta.task_id, delta.baseline_success, delta.candidate_success
+        ));
+    }
+    lines.join("\n")
 }
 
 fn create_validation_sandbox(
@@ -784,6 +873,126 @@ mod tests {
         assert!(prompt.contains("Active procedure"));
         assert_eq!(reverted.to, ModificationState::Validated);
         assert_eq!(active_again.to, ModificationState::Active);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    // A solver that "follows" an active Layer A procedure: it writes the graded
+    // file only when the candidate procedure is present in its prompt (detected
+    // by the `<active_layer_a_procedures>` block that runtime instructions add
+    // only when a procedure is active). Baseline runs lack the block and do
+    // nothing, so the candidate's marginal effect is a clean +1.
+    struct ProcedureAwareProvider;
+
+    impl crate::provider::ModelProvider for ProcedureAwareProvider {
+        fn respond<'a>(
+            &'a self,
+            request: crate::provider::ModelRequest,
+        ) -> crate::provider::ProviderFuture<'a, crate::provider::ModelResponse> {
+            Box::pin(async move {
+                let has_procedure = request
+                    .instructions
+                    .as_deref()
+                    .unwrap_or_default()
+                    .contains("<active_layer_a_procedures>");
+                let already_acted = request.input.iter().any(|item| {
+                    item.get("type").and_then(|value| value.as_str())
+                        == Some("function_call_output")
+                });
+                if has_procedure && !already_acted {
+                    Ok(crate::provider::ModelResponse {
+                        id: "r1".to_string(),
+                        output_text: String::new(),
+                        tool_calls: vec![crate::provider::ToolCall {
+                            call_id: "c1".to_string(),
+                            name: "write".to_string(),
+                            arguments: "{\"path\":\"result.txt\",\"content\":\"done\"}".to_string(),
+                        }],
+                        output_items: vec![serde_json::json!({
+                            "id": "fc1", "type": "function_call", "call_id": "c1",
+                            "name": "write",
+                            "arguments": "{\"path\":\"result.txt\",\"content\":\"done\"}"
+                        })],
+                        raw: serde_json::json!({"id": "r1"}),
+                    })
+                } else {
+                    Ok(crate::provider::ModelResponse {
+                        id: "r2".to_string(),
+                        output_text: "done".to_string(),
+                        tool_calls: Vec::new(),
+                        output_items: vec![serde_json::json!({
+                            "type": "message",
+                            "content": [{"type": "output_text", "text": "done"}]
+                        })],
+                        raw: serde_json::json!({"id": "r2"}),
+                    })
+                }
+            })
+        }
+
+        fn stream_text<'a>(
+            &'a self,
+            _request: crate::provider::ModelRequest,
+        ) -> crate::provider::ProviderFuture<'a, String> {
+            Box::pin(async move { Ok(String::new()) })
+        }
+    }
+
+    #[tokio::test]
+    async fn solver_compare_measures_candidate_marginal_effect() {
+        let root = temp_dir("mod-solver-compare");
+        let home = root.join(".greco");
+        let workspace = root.join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join("seed.txt"), "seed").unwrap();
+        let eval_task = home.join("eval").join("compare-demo");
+        fs::create_dir_all(&eval_task).unwrap();
+        fs::write(
+            eval_task.join("task.json"),
+            r#"{"id":"compare-demo","title":"Compare demo","kind":"bug_fix","prompt":"Create result.txt","budget":{"max_turns":3,"max_wall_seconds":30},"criteria":[{"id":"made","command":"test -f result.txt","timeout_seconds":5}]}"#,
+        )
+        .unwrap();
+        let report = AuditReport {
+            generated_at_unix_ms: now_millis(),
+            since: "all".to_string(),
+            session_count: 10,
+            eval_run_count: 5,
+            metrics: crate::audit::AuditMetrics {
+                tokens: 30_000,
+                ..Default::default()
+            },
+            eval_runs: Vec::new(),
+            modifications: Default::default(),
+            loop_state: None,
+            signal_assessment: "proof".to_string(),
+            report_paths: None,
+        };
+        let proposed = propose_from_audit(&home, &report).unwrap();
+        let config = Config {
+            provider: "openai".to_string(),
+            model: "test".to_string(),
+            api_key: None,
+            api_key_source: None,
+            home: home.clone(),
+            workspace: workspace.clone(),
+        };
+
+        let comparison = solver_compare(
+            &home,
+            &workspace,
+            &proposed.id,
+            &config,
+            &ProcedureAwareProvider,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(comparison.baseline_success_ppm, 0);
+        assert_eq!(comparison.candidate_success_ppm, 1_000_000);
+        assert_eq!(comparison.primary_improvement_ppm, 1_000_000);
+        assert_eq!(comparison.tasks.len(), 1);
+        assert!(!comparison.tasks[0].baseline_success);
+        assert!(comparison.tasks[0].candidate_success);
+
         fs::remove_dir_all(root).unwrap();
     }
 
