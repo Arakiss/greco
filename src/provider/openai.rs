@@ -1,7 +1,13 @@
+use std::time::Duration;
+
 use reqwest::Client;
 use serde_json::{Value, json};
+use tokio::time::sleep;
 
 use super::{ModelProvider, ModelRequest, ModelResponse, ProviderFuture, ToolCall};
+
+const RESPONSES_URL: &str = "https://api.openai.com/v1/responses";
+const MAX_ATTEMPTS: u32 = 3;
 
 #[derive(Debug, Clone)]
 pub struct OpenAiProvider {
@@ -12,10 +18,15 @@ pub struct OpenAiProvider {
 
 impl OpenAiProvider {
     pub fn new(api_key: String, model: String) -> Self {
+        let client = Client::builder()
+            .connect_timeout(Duration::from_secs(15))
+            .timeout(Duration::from_secs(600))
+            .build()
+            .unwrap_or_else(|_| Client::new());
         Self {
             api_key,
             model,
-            client: Client::new(),
+            client,
         }
     }
 
@@ -41,35 +52,53 @@ impl OpenAiProvider {
     }
 
     async fn post_json(&self, body: Value) -> Result<Value, String> {
-        let response = self
-            .client
-            .post("https://api.openai.com/v1/responses")
-            .bearer_auth(&self.api_key)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|err| format!("OpenAI request failed: {err}"))?;
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            let send_result = self
+                .client
+                .post(RESPONSES_URL)
+                .bearer_auth(&self.api_key)
+                .json(&body)
+                .send()
+                .await;
 
-        let status = response.status();
-        let value = response
-            .json::<Value>()
-            .await
-            .map_err(|err| format!("OpenAI response was not JSON: {err}"))?;
+            let response = match send_result {
+                Ok(response) => response,
+                Err(err) => {
+                    if attempt < MAX_ATTEMPTS && is_transient(&err) {
+                        sleep(backoff(attempt)).await;
+                        continue;
+                    }
+                    return Err(format!("OpenAI request failed: {err}"));
+                }
+            };
 
-        if !status.is_success() {
-            return Err(format!(
-                "OpenAI returned {status}: {}",
-                compact_json(&value)
-            ));
+            let status = response.status();
+            if !status.is_success() {
+                if attempt < MAX_ATTEMPTS && (status.as_u16() == 429 || status.is_server_error()) {
+                    sleep(backoff(attempt)).await;
+                    continue;
+                }
+                let value = response.json::<Value>().await.unwrap_or(Value::Null);
+                return Err(format!(
+                    "OpenAI returned {status}: {}",
+                    compact_json(&value)
+                ));
+            }
+
+            return response
+                .json::<Value>()
+                .await
+                .map_err(|err| format!("OpenAI response was not JSON: {err}"));
         }
-        Ok(value)
     }
 
     #[allow(dead_code)]
     async fn post_stream(&self, body: Value) -> Result<String, String> {
         let mut response = self
             .client
-            .post("https://api.openai.com/v1/responses")
+            .post(RESPONSES_URL)
             .bearer_auth(&self.api_key)
             .json(&body)
             .send()
@@ -201,6 +230,17 @@ fn apply_sse_event(event: &str, output: &mut String) -> Result<(), String> {
 
 fn compact_json(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "<unprintable json>".to_string())
+}
+
+/// Transient network failures worth retrying: connection setup and read
+/// timeouts (including the half-open socket hang documented for this OS).
+fn is_transient(err: &reqwest::Error) -> bool {
+    err.is_timeout() || err.is_connect()
+}
+
+/// Exponential backoff: 250ms, 500ms, 1s, ... bounded by the attempt count.
+fn backoff(attempt: u32) -> Duration {
+    Duration::from_millis(250u64.saturating_mul(1u64 << attempt.min(5).saturating_sub(1)))
 }
 
 #[cfg(test)]
