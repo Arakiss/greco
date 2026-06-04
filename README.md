@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/banner.svg">
-    <img src="assets/banner.svg" alt="Greco - a Rust harness that improves itself" width="100%" />
+    <source media="(prefers-color-scheme: dark)" srcset="assets/greco.svg">
+    <img src="assets/greco.svg" alt="Greco - a Rust harness that improves itself" width="100%" />
   </picture>
 </p>
 
