@@ -176,19 +176,35 @@ fn handle_propose(command: cli::ProposeCommand, config: &Config) -> Result<ExitC
 
 async fn handle_loop(command: LoopCommand, config: &Config) -> Result<ExitCode, String> {
     match command {
-        LoopCommand::Run { since, mode, json } => {
-            let report = loop_control::run(
-                &config.home,
-                &config.workspace,
-                loop_control::LoopRunOptions {
-                    since,
-                    mode: match mode {
-                        LoopRunMode::DryRun => loop_control::LoopMode::DryRun,
-                        LoopRunMode::Apply => loop_control::LoopMode::Apply,
-                    },
+        LoopCommand::Run {
+            since,
+            mode,
+            with_solver,
+            json,
+        } => {
+            let options = loop_control::LoopRunOptions {
+                since,
+                mode: match mode {
+                    LoopRunMode::DryRun => loop_control::LoopMode::DryRun,
+                    LoopRunMode::Apply => loop_control::LoopMode::Apply,
                 },
-            )
-            .await?;
+            };
+            let report = if with_solver {
+                let api_key = config.api_key.clone().ok_or_else(|| {
+                    "OPENAI_API_KEY is missing; copy .env.example to .env.local".to_string()
+                })?;
+                let provider = OpenAiProvider::new(api_key, config.model.clone());
+                loop_control::run_with_solver(
+                    &config.home,
+                    &config.workspace,
+                    options,
+                    &provider,
+                    config,
+                )
+                .await?
+            } else {
+                loop_control::run(&config.home, &config.workspace, options).await?
+            };
             if json {
                 print_pretty(&report)?;
             } else {

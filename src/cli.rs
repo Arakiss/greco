@@ -29,7 +29,7 @@ Usage:
   greco modification compare <id> [--json]
   greco modification apply <id> [--json]
   greco modification revert <id> [--json]
-  greco loop run --since <all|24h|7d|30m> [--dry-run|--apply] [--json]
+  greco loop run --since <all|24h|7d|30m> [--dry-run|--apply] [--with-solver] [--json]
   greco loop status [--json]
   greco loop gate --since <all|24h|7d|30m> [--json]
   greco loop freeze --reason <text> [--json]
@@ -209,6 +209,7 @@ pub enum LoopCommand {
     Run {
         since: String,
         mode: LoopRunMode,
+        with_solver: bool,
         json: bool,
     },
     Status {
@@ -370,6 +371,7 @@ fn parse_loop_run(args: &[String]) -> Result<Command, String> {
     let mut mode = LoopRunMode::DryRun;
     let mut saw_dry_run = false;
     let mut saw_apply = false;
+    let mut with_solver = false;
     let mut json = false;
     let mut index = 0;
     while index < args.len() {
@@ -389,6 +391,7 @@ fn parse_loop_run(args: &[String]) -> Result<Command, String> {
                 mode = LoopRunMode::Apply;
                 saw_apply = true;
             }
+            "--with-solver" => with_solver = true,
             "--json" => json = true,
             other => return Err(format!("unknown loop run option `{other}`")),
         }
@@ -397,7 +400,12 @@ fn parse_loop_run(args: &[String]) -> Result<Command, String> {
     if saw_dry_run && saw_apply {
         return Err("choose only one of --dry-run or --apply".to_string());
     }
-    Ok(Command::Loop(LoopCommand::Run { since, mode, json }))
+    Ok(Command::Loop(LoopCommand::Run {
+        since,
+        mode,
+        with_solver,
+        json,
+    }))
 }
 
 fn parse_loop_gate(args: &[String]) -> Result<Command, String> {
@@ -892,7 +900,27 @@ mod tests {
             Command::Loop(LoopCommand::Run {
                 since: "all".to_string(),
                 mode: LoopRunMode::Apply,
+                with_solver: false,
                 json: true,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_loop_run_with_solver() {
+        assert_eq!(
+            parse_args(vec![
+                "loop".into(),
+                "run".into(),
+                "--apply".into(),
+                "--with-solver".into(),
+            ])
+            .unwrap(),
+            Command::Loop(LoopCommand::Run {
+                since: "all".to_string(),
+                mode: LoopRunMode::Apply,
+                with_solver: true,
+                json: false,
             })
         );
     }

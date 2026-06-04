@@ -9,9 +9,20 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     audit::{self, AuditEvalRun, AuditReport},
+    config::Config,
     eval::EvalRunReport,
     modification::{self, LifecycleResult, ModificationLayer, ModificationState, ProposalResult},
+    provider::ModelProvider,
 };
+
+/// Wiring that lets the autonomous loop run the solver during validation. When
+/// present, autonomous apply additionally requires a positive *measured*
+/// marginal improvement (see `run_with_solver`). It is borrowed, not owned, so
+/// it stays out of the serializable option/report types.
+pub struct LoopSolver<'a> {
+    pub provider: &'a dyn ModelProvider,
+    pub config: &'a Config,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LoopBudgets {
@@ -287,6 +298,34 @@ pub async fn run(
     home: &Path,
     workspace: &Path,
     options: LoopRunOptions,
+) -> Result<LoopRunReport, String> {
+    run_inner(home, workspace, options, None).await
+}
+
+/// Run the loop with the solver in validation: autonomous apply now requires the
+/// candidate to show a positive measured marginal improvement, not only that the
+/// deterministic comparison admits it. This can only make admission stricter.
+pub async fn run_with_solver(
+    home: &Path,
+    workspace: &Path,
+    options: LoopRunOptions,
+    provider: &dyn ModelProvider,
+    config: &Config,
+) -> Result<LoopRunReport, String> {
+    run_inner(
+        home,
+        workspace,
+        options,
+        Some(LoopSolver { provider, config }),
+    )
+    .await
+}
+
+async fn run_inner(
+    home: &Path,
+    workspace: &Path,
+    options: LoopRunOptions,
+    solver: Option<LoopSolver<'_>>,
 ) -> Result<LoopRunReport, String> {
     let policy = load_policy(home)?;
     let mut state = load_state(home)?;
@@ -676,11 +715,64 @@ pub async fn run(
         }));
     }
 
+    // Solver gate: with the solver wired in, a positive *measured* marginal
+    // improvement is a hard precondition for autonomous apply. The deterministic
+    // comparison having admitted the candidate is necessary but not sufficient.
+    let solver_evidence = if let Some(ref solver) = solver {
+        let measured = modification::solver_compare(
+            home,
+            workspace,
+            &proposed.id,
+            solver.config,
+            solver.provider,
+        )
+        .await?;
+        if measured.primary_improvement_ppm <= 0 {
+            let reason = format!(
+                "solver gate: no measured marginal improvement (primary_improvement_ppm={}, baseline_ppm={}, candidate_ppm={})",
+                measured.primary_improvement_ppm,
+                measured.baseline_success_ppm,
+                measured.candidate_success_ppm
+            );
+            let rejected = modification::reject(home, &proposed.id, reason.clone())?;
+            let decision = push_decision(
+                &mut state,
+                &policy,
+                LoopDecisionKind::Rejected,
+                &options.since,
+                Some(rejected.id.clone()),
+                reason,
+                Some(comparison),
+            );
+            save_state(home, &state)?;
+            return Ok(report(LoopRunReportDraft {
+                success: false,
+                mode: options.mode,
+                decision,
+                proposed_id: Some(rejected.id),
+                validation_runs,
+                applied: None,
+                rollback: None,
+                policy,
+                state,
+            }));
+        }
+        Some(format!(
+            "solver gate passed: measured primary_improvement_ppm={}",
+            measured.primary_improvement_ppm
+        ))
+    } else {
+        None
+    };
+
     if options.mode == LoopMode::DryRun {
         let mut reason =
             "dry-run comparative evidence passed and stopped before application".to_string();
         if let Some(note) = reuse_note {
             reason = format!("{reason}; {note}");
+        }
+        if let Some(evidence) = solver_evidence.as_ref() {
+            reason = format!("{reason}; {evidence}");
         }
         let decision = push_decision(
             &mut state,
@@ -722,6 +814,9 @@ pub async fn run(
     let mut reason = "candidate passed comparative threshold and was applied".to_string();
     if let Some(note) = reuse_note {
         reason = format!("{reason}; {note}");
+    }
+    if let Some(evidence) = solver_evidence.as_ref() {
+        reason = format!("{reason}; {evidence}");
     }
     let mut kind = LoopDecisionKind::Applied;
     if let Some(freeze_reason) = post_apply_freeze_reason(&state, &policy) {
@@ -1863,6 +1958,77 @@ mod tests {
         assert!(report.rollback.is_some());
         assert!(modification::snapshot(&home).unwrap().active.is_empty());
         assert_eq!(modification::snapshot(&home).unwrap().validated.len(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    struct NoopSolver;
+
+    impl crate::provider::ModelProvider for NoopSolver {
+        fn respond<'a>(
+            &'a self,
+            _request: crate::provider::ModelRequest,
+        ) -> crate::provider::ProviderFuture<'a, crate::provider::ModelResponse> {
+            Box::pin(async move {
+                Ok(crate::provider::ModelResponse {
+                    id: "r".to_string(),
+                    output_text: "done".to_string(),
+                    tool_calls: Vec::new(),
+                    output_items: vec![serde_json::json!({
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": "done"}]
+                    })],
+                    raw: serde_json::json!({"id": "r"}),
+                })
+            })
+        }
+
+        fn stream_text<'a>(
+            &'a self,
+            _request: crate::provider::ModelRequest,
+        ) -> crate::provider::ProviderFuture<'a, String> {
+            Box::pin(async move { Ok(String::new()) })
+        }
+    }
+
+    #[tokio::test]
+    async fn apply_mode_with_solver_rejects_without_measured_improvement() {
+        let root = temp_dir("apply-solver-gate");
+        let home = root.join(".greco");
+        seed_eval(&home);
+        seed_eval_baseline(&home, false, 1_000);
+        seed_success_trace(&home);
+        let config = Config {
+            provider: "openai".to_string(),
+            model: "test".to_string(),
+            api_key: None,
+            api_key_source: None,
+            home: home.clone(),
+            workspace: root.clone(),
+        };
+
+        let report = run_with_solver(
+            &home,
+            &root,
+            LoopRunOptions {
+                since: "all".to_string(),
+                mode: LoopMode::Apply,
+            },
+            &NoopSolver,
+            &config,
+        )
+        .await
+        .unwrap();
+        let snapshot = modification::snapshot(&home).unwrap();
+
+        // The deterministic comparison admitted the candidate, but the solver
+        // measured no marginal improvement on the `true` criterion (delta 0), so
+        // the gate blocks autonomous apply: nothing is activated and the
+        // candidate is rejected with a solver-gate reason.
+        assert!(!report.success);
+        assert_eq!(report.decision.kind, LoopDecisionKind::Rejected);
+        assert!(report.decision.reason.contains("solver gate"));
+        assert!(snapshot.active.is_empty());
+        assert_eq!(snapshot.rejected.len(), 1);
         fs::remove_dir_all(root).unwrap();
     }
 
