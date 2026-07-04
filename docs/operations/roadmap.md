@@ -90,6 +90,20 @@ Decision gate: one audit window of autonomous operation shows measurable aggrega
 - Run candidate validation in sandbox homes with the proposed modification activated before admission.
 - Keep MLX and local open-weight solver work isolated in a local model lab until candidates pass activation, adherence, objective-success, and operator-cost checks.
 
+### Next — A suite a modification can move (Phase 3 completion)
+
+- Author five suite tasks derived from measured operator friction categories
+  (conventions adherence, read economy, edit discipline, selective staging,
+  documented recovery), each with a written movability hypothesis before
+  baselining. Plan: `phase3-movable-suite-plan.md` (this directory).
+- Movability admission per task: non-zero, stable baseline friction with 5%
+  delta detectability; tasks that cannot move are dropped, documented.
+- Proposal pass over real baseline traces; loop run with solver comparison;
+  `loop gate` verdict on real data — `pass` or `fail`, not `needs_more_data`
+  from an empty suite.
+- Disposition per the honest closure clause: pass unlocks Phase 4; fail
+  executes closure with a `What I learned` document.
+
 ### Later alpha — Higher layers under audit (Phase 4)
 
 - Layers B, C, S2, S3 autonomous within stricter thresholds.
