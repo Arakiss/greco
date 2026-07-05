@@ -90,19 +90,38 @@ Decision gate: one audit window of autonomous operation shows measurable aggrega
 - Run candidate validation in sandbox homes with the proposed modification activated before admission.
 - Keep MLX and local open-weight solver work isolated in a local model lab until candidates pass activation, adherence, objective-success, and operator-cost checks.
 
-### Next — A suite a modification can move (Phase 3 completion)
+### Done — A suite a modification can move (WS1 + WS2, 2026-07-05)
 
-- Author five suite tasks derived from measured operator friction categories
-  (conventions adherence, read economy, edit discipline, selective staging,
-  documented recovery), each with a written movability hypothesis before
-  baselining. Plan: `phase3-movable-suite-plan.md` (this directory).
-- Movability admission per task: non-zero, stable baseline friction with 5%
-  delta detectability; tasks that cannot move are dropped, documented.
-- Proposal pass over real baseline traces; loop run with solver comparison;
-  `loop gate` verdict on real data — `pass` or `fail`, not `needs_more_data`
-  from an empty suite.
-- Disposition per the honest closure clause: pass unlocks Phase 4; fail
-  executes closure with a `What I learned` document.
+- WS1 shipped: five fixtures under `fixtures/eval-suite/` with deterministic
+  criteria, versioned-suite loading in `greco eval` (commit `86df911`;
+  implemented by a sandboxed executor run, committed by the operator session).
+- WS2 shipped: three-run baseline per task under a clean `GRECO_HOME`
+  (`docs/operations/ws2-baseline.md`, commit `9f17a7e`). Result: **1/5 tasks
+  admitted** (`t3-edit-discipline`, deterministic retracements). The other
+  four showed zero target friction: the frontier solver already exhibits the
+  desired behavior at direct-fixture scale. WS2's own >=4 admission target
+  was missed and is recorded as such — the admission rule worked; the fixture
+  calibration is the finding.
+
+### Next — The WS3 fork (decision point, operator's call)
+
+Two non-exclusive paths, with one honesty rule binding both:
+
+- **Path A — narrow but complete:** run WS3/WS4 end to end on `t3` alone
+  (proposal pass over its baseline traces → `loop run --with-solver` →
+  `loop gate`). Cheap, exercises the entire machine on real data, and gives
+  the gate its first non-empty verdict — over a one-cluster base, stated as
+  such.
+- **Path B — widen the base:** harden fixtures (indirection, distractors,
+  longer horizons, realistic project shapes) so target frictions can appear.
+  **Re-registration rule:** every hardened fixture gets its movability
+  hypothesis re-written and committed BEFORE re-baselining — the experiment
+  must not tune tasks until answers look good.
+- Recommendation on record: A first (days), B in parallel where cheap; if A
+  fails on `t3` AND hardened fixtures stay friction-dry, the honest-closure
+  clause applies with the `What I learned` document — and that document now
+  has a real finding to carry: where frontier solvers no longer need harness
+  help at small scale.
 
 ### Later alpha — Higher layers under audit (Phase 4)
 

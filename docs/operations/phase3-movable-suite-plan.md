@@ -130,3 +130,14 @@ production harness inform fixture design here; nothing from this repo writes
 back into the production harness, and no production-harness code or config is
 imported. The two systems share ideas (risk layers, evidence-gated admission)
 and friction taxonomy — never state.
+
+## Addendum — WS2 outcome (2026-07-05)
+
+WS1 and WS2 are complete; see `ws2-baseline.md` for the full admission table.
+Outcome: 1/5 tasks admitted (target was >=4; missed and recorded). The plan's
+workstreams WS3-WS5 remain valid but now start from the WS3 fork recorded in
+`roadmap.md` (narrow t3 run and/or fixture hardening). Binding rule added to
+this plan: hardened fixtures re-register their movability hypotheses in
+writing, committed BEFORE any re-baseline run. Pre-registration is one-way;
+this addendum section is append-only, like the rest of the plan after first
+commit.
