@@ -1,51 +1,81 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 420" role="img" aria-label="Greco — a frozen model held inside a luminous self-improving loop, with modifications riding it">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 400" role="img" aria-label="GRECO — a frozen model at the core; typed modification layers around it; one change earning its way through a gate, with rollback always available">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0.8" y2="1">
-      <stop offset="0" stop-color="#160f0c"/><stop offset="1" stop-color="#251a13"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#141017"/><stop offset="1" stop-color="#1a1310"/>
     </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0" stop-color="#e8835f" stop-opacity="0.34"/>
-      <stop offset="0.45" stop-color="#d97757" stop-opacity="0.1"/>
-      <stop offset="1" stop-color="#d97757" stop-opacity="0"/>
+    <radialGradient id="core" cx="42%" cy="38%" r="70%">
+      <stop offset="0" stop-color="#4a4038"/><stop offset="1" stop-color="#2a221c"/>
     </radialGradient>
-    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#f0a07e"/><stop offset="0.5" stop-color="#d97757"/><stop offset="1" stop-color="#b85c40"/>
+    <linearGradient id="mod" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e8a179"/><stop offset="1" stop-color="#d97757"/>
     </linearGradient>
   </defs>
 
-  <rect width="1400" height="420" fill="url(#bg)"/>
-  <rect x="0" y="0" width="1400" height="3" fill="#d97757" opacity="0.9"/>
-  <circle cx="700" cy="210" r="380" fill="url(#glow)"/>
+  <rect width="1400" height="400" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1400" height="2" fill="#d97757" opacity="0.65"/>
 
-  <!-- the harness radiating outward as a field -->
-  <g fill="none" stroke="#d97757">
-    <circle cx="700" cy="210" r="300" stroke-opacity="0.06"/>
-    <circle cx="700" cy="210" r="430" stroke-opacity="0.04"/>
-    <circle cx="700" cy="210" r="600" stroke-opacity="0.025"/>
+  <!-- faint engineering baselines -->
+  <g stroke="#f0ede6" stroke-opacity="0.028">
+    <line x1="0" y1="100" x2="1400" y2="100"/>
+    <line x1="0" y1="200" x2="1400" y2="200"/>
+    <line x1="0" y1="300" x2="1400" y2="300"/>
   </g>
 
-  <g transform="translate(700 210)">
-    <!-- the self-improving loop: layered strokes fake a luminous glow -->
-    <g fill="none" stroke-linecap="round">
-      <path d="M 40 -148 A 153 153 0 1 1 -40 -148" stroke="#d97757" stroke-width="22" stroke-opacity="0.14"/>
-      <path d="M 40 -148 A 153 153 0 1 1 -40 -148" stroke="#d97757" stroke-width="12" stroke-opacity="0.28"/>
-      <path d="M 40 -148 A 153 153 0 1 1 -40 -148" stroke="url(#ring)" stroke-width="6"/>
-    </g>
-    <!-- flow arrowhead: the loop closing back on itself (clockwise) -->
-    <polygon points="-20,-158 -50,-150 -40,-130" fill="#f0a07e"/>
+  <!-- left: wordmark -->
+  <g>
+    <text x="96" y="196" font-family="Georgia, 'Times New Roman', serif" font-size="86" letter-spacing="14" fill="#f0ede6">GRECO</text>
+    <rect x="100" y="222" width="64" height="3" fill="#d97757"/>
+    <text x="100" y="262" font-family="ui-monospace, Menlo, monospace" font-size="17" fill="#9a8f82">an experiment in whether a harness can earn its own changes</text>
+    <text x="100" y="296" font-family="ui-monospace, Menlo, monospace" font-size="14" letter-spacing="2" fill="#6f665c">TYPED &#183; LAYERED &#183; REVERSIBLE &#183; MEASURED &#8212; OR HONESTLY CLOSED</text>
+  </g>
 
-    <!-- modifications riding the loop, in different states -->
-    <circle cx="153" cy="0" r="11" fill="#f0a07e"/>
-    <circle cx="-108" cy="108" r="8" fill="#d97757"/>
-    <circle cx="-153" cy="0" r="6" fill="#241c17" stroke="#d97757" stroke-width="2.5"/>
-    <circle cx="108" cy="108" r="6" fill="#241c17" stroke="#d97757" stroke-width="2.5"/>
-
-    <!-- the frozen model: a solid, static core that never changes -->
-    <rect x="-40" y="-40" width="80" height="80" rx="14" fill="#2b211a" stroke="#8a7460" stroke-width="2.5"/>
-    <g stroke="#8a7460" stroke-width="2.5" stroke-linecap="round">
-      <path d="M-16 -40 V-52 M0 -40 V-52 M16 -40 V-52 M-16 40 V52 M0 40 V52 M16 40 V52"/>
-      <path d="M-40 -16 H-52 M-40 0 H-52 M-40 16 H-52 M40 -16 H52 M40 0 H52 M40 16 H52"/>
+  <!-- right: the thesis, drawn -->
+  <g transform="translate(1085 200)">
+    <!-- modification layers around the frozen core: A (innermost) to E -->
+    <g fill="none" stroke="#f0ede6">
+      <circle r="62"  stroke-opacity="0.30"/>
+      <circle r="86"  stroke-opacity="0.20"/>
+      <circle r="110" stroke-opacity="0.13"/>
+      <circle r="134" stroke-opacity="0.08"/>
+      <circle r="158" stroke-opacity="0.05"/>
     </g>
-    <rect x="-13" y="-13" width="26" height="26" rx="6" fill="#d97757"/>
+    <!-- layer labels stepping outward along the north-west -->
+    <g font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#6f665c" text-anchor="middle">
+      <text x="-44"  y="-48">A</text>
+      <text x="-61"  y="-65">B</text>
+      <text x="-78"  y="-82">C</text>
+      <text x="-95"  y="-99">D</text>
+      <text x="-112" y="-116">E</text>
+    </g>
+
+    <!-- the gate: two posts flanking layer A at the east -->
+    <g stroke="#f0ede6" stroke-opacity="0.75" stroke-width="2.5" stroke-linecap="round">
+      <line x1="56" y1="-16" x2="70" y2="-20"/>
+      <line x1="56" y1="16"  x2="70" y2="20"/>
+    </g>
+
+    <!-- one typed modification: earning its way around layer A, through the gate -->
+    <path d="M -10 -61 A 62 62 0 0 1 55 -13" fill="none" stroke="url(#mod)" stroke-width="7" stroke-linecap="round"/>
+    <!-- its evidence trail: measured points behind it -->
+    <g fill="#d97757">
+      <circle cx="-34" cy="-52" r="3.4" opacity="0.75"/>
+      <circle cx="-52" cy="-34" r="2.8" opacity="0.5"/>
+      <circle cx="-60" cy="-12" r="2.2" opacity="0.3"/>
+    </g>
+    <!-- applied: past the gate, settled -->
+    <circle cx="61" cy="8" r="4.5" fill="#e8a179"/>
+
+    <!-- rollback: dashed return, always available -->
+    <path d="M 52 30 A 62 62 0 0 1 -30 54" fill="none" stroke="#9a8f82" stroke-width="2" stroke-dasharray="3 7" stroke-linecap="round" opacity="0.6"/>
+    <path d="M -30 54 l 9 -7 M -30 54 l 11 2" stroke="#9a8f82" stroke-width="2" stroke-linecap="round" opacity="0.6" fill="none"/>
+
+    <!-- the frozen model: solid, unchanging core -->
+    <circle r="38" fill="url(#core)" stroke="#f0ede6" stroke-opacity="0.35" stroke-width="1.5"/>
+    <g stroke="#f0ede6" stroke-opacity="0.5" stroke-width="1.5" stroke-linecap="round">
+      <line x1="-9" y1="-4" x2="9" y2="-4"/>
+      <line x1="-9" y1="2"  x2="6" y2="2"/>
+      <line x1="-9" y1="8"  x2="9" y2="8"/>
+    </g>
+    <text y="60" font-family="ui-monospace, Menlo, monospace" font-size="11" letter-spacing="1.5" fill="#6f665c" text-anchor="middle">FROZEN MODEL</text>
   </g>
 </svg>
