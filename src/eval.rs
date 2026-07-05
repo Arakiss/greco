@@ -10,6 +10,8 @@ use tokio::{io::AsyncReadExt, process::Command, time};
 
 use crate::{agent, config::Config, provider::ModelProvider};
 
+const COMMITTED_SUITE_DIR: &str = "fixtures/eval-suite";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EvalTask {
     pub id: String,
@@ -74,8 +76,8 @@ pub struct EvalCriterionReport {
     pub output: String,
 }
 
-pub fn list_tasks(home: &Path) -> Result<Vec<EvalTask>, String> {
-    let suite = suite_dir(home);
+pub fn list_tasks(home: &Path, workspace: &Path) -> Result<Vec<EvalTask>, String> {
+    let suite = suite_dir(home, workspace);
     if !suite.exists() {
         return Ok(Vec::new());
     }
@@ -104,7 +106,7 @@ pub async fn run_task(
     workspace: &Path,
     task_id: &str,
 ) -> Result<EvalRunReport, String> {
-    let task = load_task(home, task_id)?;
+    let task = load_task(home, workspace, task_id)?;
     let started = Instant::now();
     let generated_at_unix_ms = now_millis();
     let mut criteria = Vec::new();
@@ -207,7 +209,7 @@ pub async fn solve_task(
     provider: &dyn ModelProvider,
     task_id: &str,
 ) -> Result<SolveReport, String> {
-    let task = load_task(home, task_id)?;
+    let task = load_task(home, workspace, task_id)?;
     let started = Instant::now();
 
     let snapshot = snapshot_workspace(home, workspace, &task.id)?;
@@ -312,10 +314,13 @@ fn copy_tree_filtered(source: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn load_task(home: &Path, task_id: &str) -> Result<EvalTask, String> {
-    let path = suite_dir(home).join(task_id).join("task.json");
+fn load_task(home: &Path, workspace: &Path, task_id: &str) -> Result<EvalTask, String> {
+    let path = suite_dir(home, workspace).join(task_id).join("task.json");
     if !path.exists() {
-        return Err(format!("eval task `{task_id}` not found under .greco/eval"));
+        return Err(format!(
+            "eval task `{task_id}` not found under {}",
+            suite_dir(home, workspace).display()
+        ));
     }
     let task = load_task_file(&path)?;
     if task.id != task_id {
@@ -433,8 +438,13 @@ fn write_run_report(home: &Path, report: &EvalRunReport) -> Result<PathBuf, Stri
     Ok(path)
 }
 
-fn suite_dir(home: &Path) -> PathBuf {
-    home.join("eval")
+fn suite_dir(home: &Path, workspace: &Path) -> PathBuf {
+    let committed = workspace.join(COMMITTED_SUITE_DIR);
+    if committed.exists() {
+        committed
+    } else {
+        home.join("eval")
+    }
 }
 
 fn default_timeout_seconds() -> u64 {
@@ -468,8 +478,10 @@ mod tests {
     #[test]
     fn lists_tasks_in_sorted_order() {
         let home = temp_dir("eval-list");
+        let workspace = temp_dir("eval-list-workspace");
         fs::create_dir_all(home.join("eval").join("b-task")).unwrap();
         fs::create_dir_all(home.join("eval").join("a-task")).unwrap();
+        fs::create_dir_all(&workspace).unwrap();
         fs::write(
             home.join("eval").join("b-task").join("task.json"),
             r#"{"id":"b-task","title":"B","kind":"bug","prompt":"B","criteria":[{"id":"ok","command":"true"}]}"#,
@@ -481,11 +493,40 @@ mod tests {
         )
         .unwrap();
 
-        let tasks = list_tasks(&home).unwrap();
+        let tasks = list_tasks(&home, &workspace).unwrap();
 
         assert_eq!(tasks[0].id, "a-task");
         assert_eq!(tasks[1].id, "b-task");
         fs::remove_dir_all(home).unwrap();
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn committed_fixture_suite_takes_precedence() {
+        let home = temp_dir("eval-list-home-precedence");
+        let workspace = temp_dir("eval-list-workspace-precedence");
+        fs::create_dir_all(home.join("eval").join("local-task")).unwrap();
+        fs::create_dir_all(workspace.join(COMMITTED_SUITE_DIR).join("committed-task")).unwrap();
+        fs::write(
+            home.join("eval").join("local-task").join("task.json"),
+            r#"{"id":"local-task","title":"Local","kind":"bug","prompt":"Local","criteria":[{"id":"ok","command":"true"}]}"#,
+        )
+        .unwrap();
+        fs::write(
+            workspace
+                .join(COMMITTED_SUITE_DIR)
+                .join("committed-task")
+                .join("task.json"),
+            r#"{"id":"committed-task","title":"Committed","kind":"bug","prompt":"Committed","criteria":[{"id":"ok","command":"true"}]}"#,
+        )
+        .unwrap();
+
+        let tasks = list_tasks(&home, &workspace).unwrap();
+
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, "committed-task");
+        fs::remove_dir_all(home).unwrap();
+        fs::remove_dir_all(workspace).unwrap();
     }
 
     #[tokio::test]

@@ -49,7 +49,7 @@ pub fn render_snapshot(config: &Config) -> Result<String, String> {
     }
 
     lines.extend([String::new(), "phase 2".to_string(), "-------".to_string()]);
-    let tasks = eval::list_tasks(&config.home)?;
+    let tasks = eval::list_tasks(&config.home, &config.workspace)?;
     let modifications = modification::snapshot(&config.home)?;
     lines.push(format!("eval tasks: {}", tasks.len()));
     lines.push(format!(

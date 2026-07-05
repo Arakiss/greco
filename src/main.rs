@@ -364,7 +364,7 @@ async fn handle_modification(
 async fn handle_eval(command: EvalCommand, config: &Config) -> Result<ExitCode, String> {
     match command {
         EvalCommand::List { json } => {
-            let tasks = eval::list_tasks(&config.home)?;
+            let tasks = eval::list_tasks(&config.home, &config.workspace)?;
             if json {
                 let summaries = tasks.iter().map(eval::task_summary).collect::<Vec<_>>();
                 print_pretty(&summaries)?;
@@ -394,7 +394,7 @@ async fn handle_eval(command: EvalCommand, config: &Config) -> Result<ExitCode, 
         }
         EvalCommand::Run { task_id, json } => {
             if task_id == "all" {
-                let tasks = eval::list_tasks(&config.home)?;
+                let tasks = eval::list_tasks(&config.home, &config.workspace)?;
                 let mut reports = Vec::new();
                 for task in tasks {
                     reports.push(eval::run_task(&config.home, &config.workspace, &task.id).await?);

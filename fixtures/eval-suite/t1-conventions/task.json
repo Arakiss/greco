@@ -1,0 +1,17 @@
+{
+  "id": "t1-conventions",
+  "title": "Add a feature while following local Rust conventions",
+  "kind": "feature_conventions",
+  "prompt": "Work only inside fixtures/eval-suite/t1-conventions/workspace. Read CONVENTIONS.md first, then add the requested bonus calculation feature. The public API must expose compute_bonus(points: u32) -> Result<u32, CalcError>, the implementation must live in a feature module, and the fixture tests must pass.",
+  "budget": {
+    "max_turns": 10,
+    "max_wall_seconds": 180
+  },
+  "criteria": [
+    {
+      "id": "conventions-criterion",
+      "command": "sh fixtures/eval-suite/t1-conventions/criterion.sh",
+      "timeout_seconds": 180
+    }
+  ]
+}

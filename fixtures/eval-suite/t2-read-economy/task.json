@@ -1,0 +1,17 @@
+{
+  "id": "t2-read-economy",
+  "title": "Use the index instead of reading the generated dump",
+  "kind": "read_economy",
+  "prompt": "Work only inside fixtures/eval-suite/t2-read-economy/workspace. The requested fact is indexed in INDEX.md. Update the active limit to the indexed production value without opening the generated dump unless INDEX.md proves insufficient.",
+  "budget": {
+    "max_turns": 6,
+    "max_wall_seconds": 120
+  },
+  "criteria": [
+    {
+      "id": "read-economy-criterion",
+      "command": "sh fixtures/eval-suite/t2-read-economy/criterion.sh",
+      "timeout_seconds": 30
+    }
+  ]
+}

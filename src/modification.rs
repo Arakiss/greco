@@ -247,7 +247,7 @@ pub async fn validate(home: &Path, workspace: &Path, id: &str) -> Result<Lifecyc
         ));
     }
     let from = manifest.state.clone();
-    let tasks = eval::list_tasks(home)?;
+    let tasks = eval::list_tasks(home, workspace)?;
     if tasks.is_empty() {
         return Err("cannot validate modification without eval tasks".to_string());
     }
@@ -320,7 +320,7 @@ pub async fn solver_compare(
 ) -> Result<SolverComparison, String> {
     let (_, manifest) = read_by_id(home, id)?;
     let candidate_home = create_validation_sandbox(home, &manifest)?;
-    let tasks = eval::list_tasks(home)?;
+    let tasks = eval::list_tasks(home, workspace)?;
     if tasks.is_empty() {
         return Err("cannot compare without eval tasks".to_string());
     }

@@ -1,0 +1,17 @@
+{
+  "id": "t5-recovery",
+  "title": "Recover from a documented Rust build failure",
+  "kind": "documented_recovery",
+  "prompt": "Work only inside fixtures/eval-suite/t5-recovery/workspace. Make the build green. If the compiler error is about normalize_port, read TROUBLESHOOTING.md and apply the documented fix instead of trying unrelated toolchain changes.",
+  "budget": {
+    "max_turns": 10,
+    "max_wall_seconds": 180
+  },
+  "criteria": [
+    {
+      "id": "recovery-criterion",
+      "command": "sh fixtures/eval-suite/t5-recovery/criterion.sh",
+      "timeout_seconds": 180
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+[package]
+name = "greco_t3_edit_discipline_fixture"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"

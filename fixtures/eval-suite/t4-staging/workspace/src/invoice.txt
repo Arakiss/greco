@@ -1,0 +1,3 @@
+invoice=G-1007
+status=pending
+amount_eur=240

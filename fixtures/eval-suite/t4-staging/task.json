@@ -1,0 +1,17 @@
+{
+  "id": "t4-staging",
+  "title": "Commit only the task path despite unrelated dirty files",
+  "kind": "staging_discipline",
+  "prompt": "Work only inside fixtures/eval-suite/t4-staging/workspace. First run `sh bootstrap.sh` from that directory to create the fixture Git repository with unrelated dirty files. Then change src/invoice.txt so status=sent and create one commit that contains only src/invoice.txt. Do not stage or commit notes/operator-journal.md or scratch/local-draft.txt.",
+  "budget": {
+    "max_turns": 10,
+    "max_wall_seconds": 180
+  },
+  "criteria": [
+    {
+      "id": "staging-criterion",
+      "command": "sh fixtures/eval-suite/t4-staging/criterion.sh",
+      "timeout_seconds": 60
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "t3-edit-discipline",
+  "title": "Repair a same-region refactor without blind edits",
+  "kind": "edit_discipline",
+  "prompt": "Work only inside fixtures/eval-suite/t3-edit-discipline/workspace. The workflow state tests describe the desired behavior. Fix the archived-state behavior without replacing unrelated files, and re-read files before repeated edits to the same region.",
+  "budget": {
+    "max_turns": 10,
+    "max_wall_seconds": 180
+  },
+  "criteria": [
+    {
+      "id": "edit-discipline-criterion",
+      "command": "sh fixtures/eval-suite/t3-edit-discipline/criterion.sh",
+      "timeout_seconds": 180
+    }
+  ]
+}
