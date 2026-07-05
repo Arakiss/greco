@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 400" role="img" aria-label="GRECO — a frozen model at the core; typed modification layers around it; one change earning its way through a gate, with rollback always available">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 360" role="img" aria-label="A frozen core; layered rings around it; one change earning its way through a gate, its evidence trailing behind; a dashed rollback path always available">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#141017"/><stop offset="1" stop-color="#1a1310"/>
@@ -11,71 +11,53 @@
     </linearGradient>
   </defs>
 
-  <rect width="1400" height="400" fill="url(#bg)"/>
-  <rect x="0" y="0" width="1400" height="2" fill="#d97757" opacity="0.65"/>
+  <rect width="1400" height="360" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1400" height="2" fill="#d97757" opacity="0.6"/>
 
-  <!-- faint engineering baselines -->
-  <g stroke="#f0ede6" stroke-opacity="0.028">
-    <line x1="0" y1="100" x2="1400" y2="100"/>
-    <line x1="0" y1="200" x2="1400" y2="200"/>
-    <line x1="0" y1="300" x2="1400" y2="300"/>
-  </g>
-
-  <!-- left: wordmark -->
-  <g>
-    <text x="96" y="196" font-family="Georgia, 'Times New Roman', serif" font-size="86" letter-spacing="14" fill="#f0ede6">GRECO</text>
-    <rect x="100" y="222" width="64" height="3" fill="#d97757"/>
-    <text x="100" y="262" font-family="ui-monospace, Menlo, monospace" font-size="17" fill="#9a8f82">an experiment in whether a harness can earn its own changes</text>
-    <text x="100" y="296" font-family="ui-monospace, Menlo, monospace" font-size="14" letter-spacing="2" fill="#6f665c">TYPED &#183; LAYERED &#183; REVERSIBLE &#183; MEASURED &#8212; OR HONESTLY CLOSED</text>
-  </g>
-
-  <!-- right: the thesis, drawn -->
-  <g transform="translate(1085 200)">
-    <!-- modification layers around the frozen core: A (innermost) to E -->
+  <g transform="translate(560 180)">
+    <!-- the control plane: five modification layers, then the field beyond -->
     <g fill="none" stroke="#f0ede6">
-      <circle r="62"  stroke-opacity="0.30"/>
-      <circle r="86"  stroke-opacity="0.20"/>
-      <circle r="110" stroke-opacity="0.13"/>
-      <circle r="134" stroke-opacity="0.08"/>
-      <circle r="158" stroke-opacity="0.05"/>
-    </g>
-    <!-- layer labels stepping outward along the north-west -->
-    <g font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#6f665c" text-anchor="middle">
-      <text x="-44"  y="-48">A</text>
-      <text x="-61"  y="-65">B</text>
-      <text x="-78"  y="-82">C</text>
-      <text x="-95"  y="-99">D</text>
-      <text x="-112" y="-116">E</text>
+      <circle r="62"  stroke-opacity="0.32"/>
+      <circle r="86"  stroke-opacity="0.21"/>
+      <circle r="110" stroke-opacity="0.14"/>
+      <circle r="134" stroke-opacity="0.09"/>
+      <circle r="158" stroke-opacity="0.055"/>
+      <circle r="240" stroke-opacity="0.03"/>
+      <circle r="360" stroke-opacity="0.02"/>
+      <circle r="520" stroke-opacity="0.012"/>
+      <circle r="700" stroke-opacity="0.008"/>
     </g>
 
-    <!-- the gate: two posts flanking layer A at the east -->
-    <g stroke="#f0ede6" stroke-opacity="0.75" stroke-width="2.5" stroke-linecap="round">
-      <line x1="56" y1="-16" x2="70" y2="-20"/>
-      <line x1="56" y1="16"  x2="70" y2="20"/>
+    <!-- the gate: two posts flanking the innermost layer, east -->
+    <g stroke="#f0ede6" stroke-opacity="0.8" stroke-width="2.5" stroke-linecap="round">
+      <line x1="56" y1="-16" x2="72" y2="-21"/>
+      <line x1="56" y1="16"  x2="72" y2="21"/>
     </g>
 
-    <!-- one typed modification: earning its way around layer A, through the gate -->
+    <!-- one typed change, earning its way around the innermost layer toward the gate -->
     <path d="M -10 -61 A 62 62 0 0 1 55 -13" fill="none" stroke="url(#mod)" stroke-width="7" stroke-linecap="round"/>
-    <!-- its evidence trail: measured points behind it -->
+    <!-- its evidence, measured and trailing -->
     <g fill="#d97757">
       <circle cx="-34" cy="-52" r="3.4" opacity="0.75"/>
       <circle cx="-52" cy="-34" r="2.8" opacity="0.5"/>
       <circle cx="-60" cy="-12" r="2.2" opacity="0.3"/>
     </g>
-    <!-- applied: past the gate, settled -->
+    <!-- applied: past the gate, settled on the layer -->
     <circle cx="61" cy="8" r="4.5" fill="#e8a179"/>
 
-    <!-- rollback: dashed return, always available -->
-    <path d="M 52 30 A 62 62 0 0 1 -30 54" fill="none" stroke="#9a8f82" stroke-width="2" stroke-dasharray="3 7" stroke-linecap="round" opacity="0.6"/>
-    <path d="M -30 54 l 9 -7 M -30 54 l 11 2" stroke="#9a8f82" stroke-width="2" stroke-linecap="round" opacity="0.6" fill="none"/>
+    <!-- rollback: the dashed way back, always open -->
+    <path d="M 52 30 A 62 62 0 0 1 -30 54" fill="none" stroke="#9a8f82" stroke-width="2" stroke-dasharray="3 7" stroke-linecap="round" opacity="0.55"/>
+    <path d="M -30 54 l 9 -7 M -30 54 l 11 2" stroke="#9a8f82" stroke-width="2" stroke-linecap="round" opacity="0.55" fill="none"/>
 
-    <!-- the frozen model: solid, unchanging core -->
-    <circle r="38" fill="url(#core)" stroke="#f0ede6" stroke-opacity="0.35" stroke-width="1.5"/>
+    <!-- a rejected candidate: archived outside the gate, never deleted -->
+    <circle cx="118" cy="-64" r="3" fill="none" stroke="#9a8f82" stroke-width="1.5" opacity="0.5"/>
+
+    <!-- the frozen model: solid, unchanging -->
+    <circle r="38" fill="url(#core)" stroke="#f0ede6" stroke-opacity="0.38" stroke-width="1.5"/>
     <g stroke="#f0ede6" stroke-opacity="0.5" stroke-width="1.5" stroke-linecap="round">
       <line x1="-9" y1="-4" x2="9" y2="-4"/>
       <line x1="-9" y1="2"  x2="6" y2="2"/>
       <line x1="-9" y1="8"  x2="9" y2="8"/>
     </g>
-    <text y="60" font-family="ui-monospace, Menlo, monospace" font-size="11" letter-spacing="1.5" fill="#6f665c" text-anchor="middle">FROZEN MODEL</text>
   </g>
 </svg>
