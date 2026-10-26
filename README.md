@@ -1,3 +1,6 @@
+> **Archived on 2026-10-26.**
+> Greco was an experiment in whether a coding-agent harness can measurably improve itself. The experiment stopped in September 2026; the code is kept for reference.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/greco.svg">
